@@ -1,0 +1,301 @@
+* {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none; 
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: url("/static/images/black hole copy.png");
+            overflow: hidden;
+            background-size: cover; 
+            background-repeat: no-repeat;
+            background-position: center center;
+            position: relative;
+            backdrop-filter: blur(1px);
+        }
+        
+       .container {
+            display: flex;
+            max-width: 800px;
+            width: 100%;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(33, 33, 33, 0.5);
+            position: relative;
+            z-index: 10;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+             background: rgba(0, 0, 0, 0.6);
+        }
+
+        .left-panel {
+            width: 50%;
+            background: rgba(17, 17, 17, 0.8);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+        }
+
+        .logo {
+            width: 150px;
+            height: 150px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 25px;
+            position: relative;
+            z-index: 2;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            box-shadow: 
+            0 0 20px rgba(0, 0, 0, 0.3),
+            inset 0 0 10px rgba(255, 255, 255, 0.2);
+            background: rgba(60, 60, 70, 0.6);
+            overflow: hidden;
+            padding: 15px;
+        }
+
+        .logo img {
+            width: 80%;
+            height: auto;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.7));
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            border-radius: 10px;
+        }
+
+        
+
+
+        .left-panel h2 {
+            font-size: 32px;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 2;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .left-panel p {
+            font-size: 16px;
+            line-height: 1.6;
+            max-width: 300px;
+            position: relative;
+            z-index: 2;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .features {
+            margin-top: 30px;
+            text-align: left;
+            position: relative;
+            z-index: 2;
+            width: 100%;
+            max-width: 300px;
+            
+
+
+        }
+
+        .feature {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    font-size: 15px;
+    padding: 10px;
+    background: linear-gradient(90deg, #383838, #4a4a4a); /* Серый градиент */
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1); /* Легкая белая граница */
+}
+
+        .feature i {
+            margin-right: 10px;
+            font-size: 20px;
+            color: #b0b0b0; /* Серые галочки */
+            min-width: 24px;
+            
+        }
+
+        .form-container {
+            flex: 1;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            color: #000000;
+            
+        }
+
+        .form-header {
+            margin-bottom: 40px;
+        }
+
+        .form-header h1 {
+            color: #fff;
+            font-size: 40px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            
+        }
+
+        .form-header p {
+    color: #a0a7c2;
+    font-size: 16px;
+    display: block; 
+    text-align: center; 
+    margin-top: 15px; 
+    margin-top: -20px;
+    border-radius: 20px; 
+    max-width: 250px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+        .input-group {
+            position: relative;
+            margin-bottom: 30px;
+            color: #ccd0df;  
+             
+        }
+
+     .input-group label {
+    display: block;
+    color: #dfdddd !important; /* Серый цвет для надписей */
+    margin-bottom: 8px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+        .input-box {
+            position: relative;
+            height: 55px;
+            margin-bottom: 25px;
+            
+        }
+
+        
+.input-box input {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to right, #141414, #202020) !important;
+    border: 2px solid rgba(255, 255, 255, 0.15) !important;
+    border-radius: 15px !important;
+    color: #fff;
+    font-size: 16px;
+    padding: 0 20px 0 50px;
+    transition: all 0.3s ease;
+}
+
+
+.input-box input:focus {
+    border-color: rgba(255, 255, 255, 0.4);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(150, 150, 150, 0.3);
+    border-radius: 15px; 
+}
+
+
+        .input-box input::placeholder {
+            color: #8a8a8a;
+            
+        }
+
+.input-hint {
+    font-size: 13px;
+    color: #a0a0a0 !important; /* Серый цвет для подсказок */
+    margin-top: 5px;
+}
+
+        .btn {
+    width: 100%;
+    height: 55px;
+    background: linear-gradient(90deg, #6b6b6b, #4a4a4a); /* Серый градиент */
+    border: none;
+    border-radius: 15px;
+    color: #d0d0d0; /* Светло-серый текст */
+    font-size: 18px;
+    font-weight: 600;
+    cursor: not-allowed; /* Курсор "недоступно" */
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    margin-top: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    opacity: 0.8; /* Небольшая прозрачность */
+}
+
+
+.form-container .input-hint {
+    font-size: 13px;
+    color: #a0a0a0 !important;
+    border-radius: 15px;
+    margin-top: -15px;
+     color: #ffff;
+}
+
+.form-container .btn {
+    width: 100%;
+    height: 55px;
+    background: linear-gradient(90deg, #6b6b6b, #4a4a4a) !important;
+    border: none;
+    border-radius: 15px;
+    color: #ffffff !important;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: not-allowed;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    margin-top: 20px;
+   
+    opacity: 0.8;
+}
+
+.form-container .btn:hover,
+.form-container .btn:active {
+    transform: none !important;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+.form-container .btn::after {
+    display: none !important;
+}
+
+        .btn:hover {
+    transform: none;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+        .btn:active {
+    transform: none;
+}
+        .btn::after {
+    display: none; /* Убираем анимацию */
+}
+
+
+        
+
+.divider {
+            width: 100%;
+            max-width: 500px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+            margin: 0 auto 30px;
+        }
+

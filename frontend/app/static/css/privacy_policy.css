@@ -1,0 +1,255 @@
+       * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none; 
+            user-select: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-image: url("../images/black-hole.png");
+            overflow: hidden;
+            background-size: cover; 
+            background-repeat: no-repeat;
+            background-position: center center;
+            position: relative;
+            backdrop-filter: blur(1px);
+            color: #fff;
+        }
+        
+        /* Анимированные звезды на фоне */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            animation: twinkle linear infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 900px;
+            background: rgba(44, 44, 44, 0.85);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 40px auto;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .logo img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        
+        .logo-text {
+            font-size: 24px;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 0 10px rgba(110, 142, 251, 0.7);
+        }
+        
+        .back-btn {
+            background: linear-gradient(135deg, #2e395eff, #140b20ff);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(110, 142, 251, 0.4);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #ffffff;
+            font-size: 32px;
+            position: relative;
+            padding-bottom: 15px;
+        }
+        
+        h1:after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 3px;
+            background: linear-gradient(to right, #2e395eff, #140b20ff);
+            border-radius: 3px;
+        }
+        
+        .content {
+            line-height: 1.7;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .section:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        h2 {
+            color: #ffffff;
+            margin-bottom: 15px;
+            font-size: 22px;
+            border-left: 4px solid #2e395eff;
+            padding-left: 12px;
+            display: flex;
+            align-items: center;
+        }
+        
+        h2:before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #140b20ff;
+            margin-right: 10px;
+        }
+        
+        p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+        
+        ul {
+            padding-left: 25px;
+            margin-bottom: 15px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+            position: relative;
+        }
+        
+        li:before {
+            content: '•';
+            color: #2e395eff;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+        }
+        
+        .highlight {
+            color: #2e395eff;
+            font-weight: 600;
+        }
+        
+        .contact-info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 30px;
+            border-left: 4px solid #2e395eff;
+        }
+        
+        .last-updated {
+            text-align: right;
+            font-style: italic;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 30px;
+            font-size: 14px;
+        }
+        
+        /* Анимация появления контента */
+        .section {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.6s forwards;
+        }
+        
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* Создание задержек для анимации */
+        .section:nth-child(1) { animation-delay: 0.1s; }
+        .section:nth-child(2) { animation-delay: 0.2s; }
+        .section:nth-child(3) { animation-delay: 0.3s; }
+        .section:nth-child(4) { animation-delay: 0.4s; }
+        .section:nth-child(5) { animation-delay: 0.5s; }
+        .section:nth-child(6) { animation-delay: 0.6s; }
+        .section:nth-child(7) { animation-delay: 0.7s; }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                width: 95%;
+            }
+            
+            .header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+            
+            h1 {
+                font-size: 26px;
+            }
+            
+            h2 {
+                font-size: 20px;
+            }
+        }

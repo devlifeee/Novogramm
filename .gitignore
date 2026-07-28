@@ -1,0 +1,94 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.env
+.env.*
+!.env.example
+!.env.development
+.cdsapirc
+*.pem
+*.key
+credentials*.json
+*.nc
+*.grib
+*.grib2
+*.npz
+*.npy
+*.zarr/
+*.pt
+*.pth
+*.ckpt
+outputs/*
+!outputs/.gitkeep
+/data/raw/
+/checkpoints/
+/bitstreams/
+/artifacts/
+/submission/*
+!/submission/README.md
+mlruns/
+mlartifacts/
+/prometheus-data/
+/grafana-data/
+/monitoring/prometheus-data/
+/monitoring/grafana-data/
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python (backend)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.coverage*
+coverage.xml
+.env
+.claude/
+.claude
+
+# CI / compose artifacts
+compose-rendered.yml
+backend/*-report.xml
+
+# Local ERA5 datasets
+data/
+data/era5_28ch_demo/
+data/**/*.zarr/
+data/**/*.zarr.tmp/
+!src/era5_minimum/data/
+!src/era5_minimum/data/model_input.py
+# Local packaged ERA5 demo data; too large for GitHub and reproducible outside Git.
+era5_28ch_demo.tar.zst
+weatherbench2_*.zip
+era5-minimum-*-model.zip
