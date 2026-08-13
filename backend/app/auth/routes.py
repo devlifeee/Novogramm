@@ -1,841 +1,278 @@
-import bcrypt
 import re
-import random
+import secrets
+from datetime import datetime, timedelta, timezone
+
+import bcrypt
 import requests
-import os
-import base64
-from flask import Blueprint, request, jsonify, render_template, current_app, url_for, g, make_response
-from app.utils import is_valid_email, send_verification_email, send_password_reset_email
-import psycopg2
-import psycopg2.extras
-from app.database import execute_query
-from datetime import datetime, timedelta
+from flask import Blueprint, current_app, g, jsonify, request
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-auth_bp = Blueprint('auth', __name__)
+from app.database import execute_query, transaction, _query
+from app.security import (
+    auth_required, bearer_token, current_user, hash_secret, issue_session, normalize_phone,
+    rate_limit, utcnow,
+)
+from app.utils import is_valid_email, send_password_reset_email, send_verification_email
 
-def generate_verification_code():
-    return str(random.randint(10000, 99999))
 
-def generate_nonce():
-    return base64.b64encode(os.urandom(16)).decode('utf-8')
+auth_bp = Blueprint("auth", __name__)
+USERNAME_RE = re.compile(r"^[a-z0-9_.]{3,30}$")
 
-@auth_bp.before_request
-def set_nonce():
-    g.nonce = generate_nonce()
 
-# @auth_bp.route('/')
-# def registration_page():
-#     """Отображение страницы регистрации"""
-#     response = make_response(render_template('auth/registration.html', 
-#                                            nonce=g.nonce, 
-#                                            recaptcha_site_key=current_app.config['RECAPTCHA_SITE_KEY'],
-#                                            recaptcha_disabled=current_app.config.get('RECAPTCHA_DISABLED', False)))
-    
-#     # Set Content Security Policy
-#     csp = (
-#         f"default-src 'self'; "
-#         f"script-src 'self' 'nonce-{g.nonce}' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-#         f"style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-#         f"style-src-elem 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-#         f"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-#         f"img-src 'self' data: https://www.google.com https://www.gstatic.com; "
-#         f"connect-src 'self' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-#         f"frame-src https://www.google.com https://www.recaptcha.net; "
-#         f"frame-ancestors 'self' https://www.google.com; "
-#         f"worker-src blob:; "
-#         f"object-src 'none'; base-uri 'self';"
-#     )
-#     response.headers['Content-Security-Policy'] = csp
-#     response.headers['Cache-Control'] = 'no-store'
-#     return response 
+def error(message, status=400, code="invalid_request"):
+    return jsonify({"success": False, "error": message, "code": code}), status
 
-# @auth_bp.route('/privacy')
-# def privacy_policy():
-#     return render_template('auth/privacy_policy.html')
 
-# @auth_bp.route('/forgot-password')
-# def forgot_password_page():
-#     response = make_response(render_template('auth/forgot_password.html', 
-#                                            nonce=g.nonce, 
-#                                            recaptcha_site_key=current_app.config['RECAPTCHA_SITE_KEY'],
-#                                            recaptcha_disabled=current_app.config.get('RECAPTCHA_DISABLED', False)))
-    
-#     # Set Content Security Policy
-#     csp = (
-#         f"default-src 'self'; "
-#         f"script-src 'self' 'nonce-{g.nonce}' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-#         f"object-src 'none'; "
-#         f"style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-#         f"style-src-elem 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-#         f"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-#         f"img-src 'self' data: https://www.google.com https://www.gstatic.com; "
-#         f"connect-src 'self' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-#         f"frame-src https://www.google.com https://www.recaptcha.net; "
-#         f"base-uri 'self'; "
-#         f"frame-ancestors 'self' https://www.google.com; "
-#         f"worker-src blob:; "
-#         f"child-src blob:;"
-#     )
-#     response.headers['Content-Security-Policy'] = csp
-#     return response
+def registration_token(email):
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="registration").dumps(email)
 
-@auth_bp.route('/register', methods=['POST'])
-def register():
-    """Обработка регистрации нового пользователя"""
-    current_app.logger.warning("=== НАЧАЛО РЕГИСТРАЦИИ ===")
-    
+
+def registration_email(token):
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="registration").loads(token, max_age=1800)
+
+
+def strong_password(value):
+    return isinstance(value, str) and len(value) >= 10 and re.search(r"[a-z]", value) and re.search(r"[A-Z]", value) and re.search(r"\d", value)
+
+
+def verify_recaptcha(token):
+    if current_app.config["RECAPTCHA_DISABLED"]:
+        return True
+    if not token or not current_app.config["RECAPTCHA_SECRET_KEY"]:
+        return False
     try:
-        data = request.get_json()
-        current_app.logger.warning(f"Received data: {data}")
-        current_app.logger.warning(f"Request headers: {dict(request.headers)}")
-        current_app.logger.warning(f"Request method: {request.method}")
-        current_app.logger.warning(f"Request content type: {request.content_type}")
-    except Exception as e:
-        current_app.logger.error(f"Error parsing JSON: {e}")
-        return jsonify({'success': False, 'error': 'Invalid JSON format'}), 400
-    
-    if not data:
-        current_app.logger.error("No JSON data received")
-        return jsonify({'success': False, 'error': 'Invalid request format'}), 400
-        
-    email = data.get('email')
-    password = data.get('password')
-    # Поддерживаем оба формата: camelCase и snake_case
-    confirm_password = data.get('confirmPassword') or data.get('confirm_password')
-    recaptcha_response = data.get('g-recaptcha-response')
-    
-    current_app.logger.info(f"Registration attempt for email: {email}")
+        response = requests.post("https://www.google.com/recaptcha/api/siteverify", data={"secret": current_app.config["RECAPTCHA_SECRET_KEY"], "response": token, "remoteip": request.remote_addr}, timeout=5)
+        return response.ok and response.json().get("success") is True
+    except requests.RequestException:
+        return False
 
-    # Валидация данных
-    if not email or not password:
-        current_app.logger.error("Missing email or password")
-        return jsonify({'success': False, 'error': 'Заполните все поля'}), 400
-        
-    if not is_valid_email(email):
-        current_app.logger.error(f"Invalid email format: {email}")
-        return jsonify({'success': False, 'error': 'Некорректный email'}), 400
-        
-    if password != confirm_password:
-        current_app.logger.error("Passwords don't match")
-        return jsonify({'success': False, 'error': 'Пароли не совпадают'}), 400
 
-    # reCAPTCHA verification (skip if disabled)
-    if not current_app.config.get('RECAPTCHA_DISABLED', False):
-        if not recaptcha_response:
-            current_app.logger.error("Missing reCAPTCHA response")
-            return jsonify({'success': False, 'error': 'Пожалуйста, подтвердите, что вы не робот.'}), 400
-
-        # Verify reCAPTCHA with Google servers
-        recaptcha_verification_url = "https://www.google.com/recaptcha/api/siteverify"
-        verification_payload = {
-            'secret': current_app.config['RECAPTCHA_SECRET_KEY'],
-            'response': recaptcha_response,
-            'remoteip': request.remote_addr
-        }
-
-        try:
-            current_app.logger.info(f"Verifying reCAPTCHA... Token length: {len(recaptcha_response) if recaptcha_response else 0}")
-            current_app.logger.info(f"Using secret key: {current_app.config['RECAPTCHA_SECRET_KEY'][:20]}...")
-            verification_response = requests.post(recaptcha_verification_url, data=verification_payload)
-            verification_result = verification_response.json()
-            
-            current_app.logger.info(f"reCAPTCHA API response: {verification_result}")
-            
-            if not verification_result.get('success'):
-                error_codes = verification_result.get('error-codes', [])
-                current_app.logger.error(f"reCAPTCHA verification failed: {error_codes}")
-                
-                # Более детальные сообщения об ошибках
-                if 'invalid-input-secret' in error_codes:
-                    return jsonify({'success': False, 'error': 'Ошибка конфигурации reCAPTCHA. Обратитесь к администратору.'}), 500
-                elif 'invalid-input-response' in error_codes:
-                    return jsonify({'success': False, 'error': 'Недействительный токен reCAPTCHA. Попробуйте еще раз.'}), 400
-                elif 'timeout-or-duplicate' in error_codes:
-                    return jsonify({'success': False, 'error': 'Токен reCAPTCHA истек или уже использован. Попробуйте еще раз.'}), 400
-                else:
-                    return jsonify({'success': False, 'error': 'Подтверждение reCAPTCHA не пройдено. Пожалуйста, попробуйте еще раз.'}), 400
-                
-            current_app.logger.info("✅ reCAPTCHA verification successful")
-        except requests.exceptions.RequestException as e:
-            current_app.logger.error(f"Error communicating with reCAPTCHA API: {e}")
-            return jsonify({'success': False, 'error': 'Не удалось проверить reCAPTCHA. Пожалуйста, попробуйте позже.'}), 500
-    else:
-        current_app.logger.info("⚠️ reCAPTCHA verification skipped (disabled in config)")
-
-    # Проверка существования пользователя в БД PostgreSQL
-    try:
-        current_app.logger.info("Checking if user already exists...")
-        result = execute_query(
-            "SELECT id FROM email_auth WHERE email = %s", 
-            (email,), 
-            fetch=True
-        )
-        current_app.logger.info(f"User exists check result: {result}")
-        
-        if result:
-            current_app.logger.warning(f"User already exists: {email}")
-            return jsonify({'success': False, 'error': 'Пользователь с таким email уже существует'}), 400
-    except Exception as e:
-        current_app.logger.error(f"Ошибка БД при проверке пользователя: {str(e)}")
-        return jsonify({'success': False, 'error': 'Ошибка базы данных'}), 500
-    
-    # Хэшируем пароль
-    current_app.logger.info("Hashing password...")
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    current_app.logger.info("Password hashed successfully")
-    
-    # Создаем пользователя сразу в основной таблице (неподтвержденный)
-    try:
-        current_app.logger.info("Creating user in database...")
-        user_result = execute_query(
-            "INSERT INTO email_auth (email, password, verified) VALUES (%s, %s, FALSE) RETURNING id",
-            (email, hashed_password.decode('utf-8')),
-            fetch=True
-        )
-        current_app.logger.info(f"✅ Created user in email_auth: {user_result}")
-        
-        if not user_result:
-            current_app.logger.error("User creation returned None!")
-            return jsonify({'success': False, 'error': 'Ошибка при создании пользователя'}), 500
-            
-    except Exception as e:
-        current_app.logger.error(f"❌ Ошибка создания пользователя: {str(e)}")
-        return jsonify({'success': False, 'error': 'Ошибка при создании пользователя'}), 500
-    
-    # Генерация кода подтверждения
-    current_app.logger.info("Generating verification code...")
-    code = generate_verification_code()
-    expires_at = datetime.now() + timedelta(minutes=30)
-    current_app.logger.info(f"Generated code: {code}")
-    
-    # Сохраняем код в базу данных
-    try:
-        current_app.logger.info("Saving verification code...")
-        # Сначала удаляем старые коды для этого email
-        execute_query(
-            "DELETE FROM verification_codes WHERE email = %s",
-            (email,)
-        )
-        
-        # Сохраняем новый код
-        execute_query(
-            "INSERT INTO verification_codes (email, code, expires_at) VALUES (%s, %s, %s)",
-            (email, code, expires_at)
-        )
-        current_app.logger.info(f"✅ Saved verification code for {email}: {code}")
-    except Exception as e:
-        current_app.logger.error(f"❌ Ошибка сохранения кода: {str(e)}")
-        return jsonify({'success': False, 'error': 'Ошибка при сохранении кода подтверждения'}), 500
-
-    # Отправка email с кодом подтверждения
-    current_app.logger.info("Sending verification email...")
-    
-    # Проверяем флаг SKIP_EMAIL_VERIFICATION (используется для разработки)
-    if current_app.config.get('SKIP_EMAIL_VERIFICATION', False):
-        current_app.logger.info("⚠️ Email verification skipped (SKIP_EMAIL_VERIFICATION enabled)")
-        # Генерируем токен авторизации и сразу верифицируем пользователя
-        import secrets
-        auth_token = secrets.token_urlsafe(32)
-        
-        # Обновляем пользователя с токеном и отмечаем как верифицированного
-        execute_query(
-            "UPDATE email_auth SET verified = TRUE, auth_token = %s WHERE email = %s",
-            (auth_token, email)
-        )
-        
-        return jsonify({
-            'success': True,
-            'message': 'Регистрация успешна (письмо не отправляется в режиме разработки)',
-            'token': auth_token
-        }), 200
-    
-    if send_verification_email(email, code):
-        current_app.logger.info("✅ Verification email sent successfully")
-        return jsonify({'success': True}), 200
-    else:
-        current_app.logger.error("❌ Failed to send verification email")
-        return jsonify({
-            'success': False, 
-            'error': 'Ошибка отправки кода подтверждения'
-        }), 500
-
-@auth_bp.route('/resend', methods=['POST'])
-def resend_verification_code():
-    """Повторная отправка кода подтверждения"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
-        
-        email = data.get('email')
-        
-        if not email:
-            return jsonify({'success': False, 'error': 'Email is required'}), 400
-        
-        current_app.logger.info(f"Resending verification code for: {email}")
-        
-        # Проверяем, что пользователь существует и не подтвержден
-        user_check = execute_query(
-            "SELECT id, verified FROM email_auth WHERE email = %s",
-            (email,),
-            fetch=True
-        )
-        
-        if not user_check:
-            return jsonify({'success': False, 'error': 'Пользователь не найден'}), 404
-        
-        if user_check[0]['verified']:
-            return jsonify({'success': False, 'error': 'Email уже подтвержден'}), 400
-        
-        # Генерация нового кода подтверждения
-        code = generate_verification_code()
-        expires_at = datetime.now() + timedelta(minutes=30)
-        
-        # Удаляем старые коды для этого email
-        execute_query("DELETE FROM verification_codes WHERE email = %s", (email,))
-        
-        # Сохраняем новый код
-        execute_query(
-            "INSERT INTO verification_codes (email, code, expires_at) VALUES (%s, %s, %s)",
-            (email, code, expires_at)
-        )
-        
-        # Отправка email с кодом подтверждения
-        if send_verification_email(email, code):
-            current_app.logger.info(f"✅ Resent verification code to {email}")
-            return jsonify({'success': True, 'message': 'Код подтверждения отправлен повторно'}), 200
-        else:
-            current_app.logger.error(f"❌ Failed to resend verification email to {email}")
-            return jsonify({'success': False, 'error': 'Ошибка отправки email'}), 500
-            
-    except Exception as e:
-        current_app.logger.error(f"Resend error: {str(e)}")
-        return jsonify({'success': False, 'error': 'Internal server error'}), 500
-
-# @auth_bp.route('/account_creation')
-# def account_creation():
-#     """Страница завершения регистрации"""
-#     email = request.args.get('email')
-#     return render_template('auth/account.html', email=email)
-
-@auth_bp.route('/verify_code', methods=['POST'])
-@auth_bp.route('/verify', methods=['POST'])
-def verify_code():
-    """Проверка кода подтверждения email"""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
-        
-        email = data.get('email')
-        code = data.get('code')
-        
-        current_app.logger.info(f"Verifying code for email: {email}, code: {code}")
-        
-        if not email or not code:
-            return jsonify({'success': False, 'error': 'Email and code are required'}), 400
-
-        # Проверяем код подтверждения в базе данных
-        query = """
-            SELECT * FROM verification_codes 
-            WHERE email = %s AND code = %s
-        """
-        result = execute_query(query, (email, code), fetch=True)
-        
-        if result:
-            # Проверяем срок действия кода в Python
-            expires_at = result['expires_at']
-            
-            # Конвертируем в datetime если это строка
-            if isinstance(expires_at, str):
-                try:
-                    # Пытаемся спарсить ISO формат
-                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
-                except:
-                    try:
-                        # Пытаемся спарсить другой формат
-                        expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
-                    except:
-                        current_app.logger.error(f"Cannot parse expires_at: {expires_at}")
-                        expires_at = datetime.now()  # Устанавливаем прошлое время, если не удалось спарсить
-            
-            if expires_at > datetime.now():
-                current_app.logger.info(f"Code verified for {email}")
-                
-                # Удаляем использованный код подтверждения
-                execute_query("DELETE FROM verification_codes WHERE email = %s AND code = %s", (email, code))
-                
-                # Помечаем пользователя как подтвержденного
-                execute_query("UPDATE email_auth SET verified = TRUE WHERE email = %s", (email,))
-                current_app.logger.info(f"User {email} verified successfully")
-                
-                return jsonify({
-                    'success': True, 
-                    'message': 'Email verified successfully',
-                    'redirect': f'/auth/account_creation?email={email}'
-                })
-            else:
-                current_app.logger.warning(f"Verification code expired for {email}")
-                return jsonify({
-                    'success': False, 
-                    'error': 'Код подтверждения истек. Запросите новый код.'
-                }), 400
-        else:
-            current_app.logger.warning(f"Invalid verification code for {email}")
-            return jsonify({
-                'success': False, 
-                'error': 'Неверный код подтверждения'
-            }), 400
-            
-    except Exception as e:
-        current_app.logger.error(f"Verification error: {str(e)}")
-        return jsonify({
-            'success': False, 
-            'error': 'Internal server error'
-        }), 500
-
-@auth_bp.route('/complete_registration', methods=['POST'])
-def complete_registration():
-    """Завершение регистрации"""
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        name = data.get('name')
-        username = data.get('username').strip().lower() if data.get('username') else None
-        
-        current_app.logger.info(f"Complete registration for: {email}, name: {name}, username: {username}")
-        
-        # Проверка данных 
-        if not email or not name or not username:
-            return jsonify({'success': False, 'error': 'Заполните все поля'}), 400
-        
-        # Валидация username
-        if not re.match(r'^[a-z0-9_.]+$', username):
-            return jsonify({'success': False, 'error': 'Username может содержать только буквы, цифры, подчеркивание и точки'}), 400
-        
-        if len(username) < 3 or len(username) > 10:
-            return jsonify({'success': False, 'error': 'Username должен быть от 3 до 10 символов'}), 400
-        
-        # Пользователь уже должен существовать после верификации email
-        current_app.logger.info(f"Completing registration for verified user: {email}")
-        
-        # Сначала проверим, что пользователь действительно существует
-        user_exists = execute_query(
-            "SELECT id, email, verified FROM email_auth WHERE email = %s", 
-            (email,), 
-            fetch=True
-        )
-        current_app.logger.info(f"User exists check: {user_exists}")
-        
-        if not user_exists:
-            current_app.logger.error(f"User does not exist for email: {email}")
-            return jsonify({'success': False, 'error': 'Пользователь не найден. Пожалуйста, пройдите регистрацию заново.'}), 404
-        
-        # Проверка уникальности username
-        username_check = execute_query(
-            "SELECT id FROM email_auth WHERE username = %s AND email != %s",
-            (username, email),
-            fetch=True
-        )
-        current_app.logger.info(f"Username check result: {username_check}")
-        
-        if username_check:
-            current_app.logger.warning(f"Username already taken: {username}")
-            return jsonify({'success': False, 'error': 'Этот username уже занят'}), 400
-        
-        # Генерация токена аутентификации
-        auth_token = bcrypt.gensalt().decode('utf-8')[:32]
-        
-        # Обновление данных пользователя
-        update_query = """
-            UPDATE email_auth 
-            SET name = %s, username = %s, auth_token = %s
-            WHERE email = %s
-            RETURNING id
-        """
-        current_app.logger.info(f"Executing update query for email: {email}")
-        result = execute_query(update_query, (name, username, auth_token, email), fetch=True)
-        current_app.logger.info(f"Update result: {result}")
-        
-        if not result:
-            current_app.logger.error(f"Failed to update user for email: {email}")
-            return jsonify({'success': False, 'error': 'Ошибка обновления пользователя'}), 500
-        
-        user_id = result['id']
-        current_app.logger.info(f"Registration completed for user ID: {user_id}")
-            
-        return jsonify({
-            'success': True, 
-            'message': 'Регистрация успешно завершена!',
-            'user': {
-                'id': user_id,
-                'email': email,
-                'name': name,
-                'username': username,
-                'token': auth_token
-            },
-            'redirect': '/home'
-        }), 200 
-  
-    except Exception as e:
-        current_app.logger.error(f"Ошибка при завершении регистрации: {str(e)}")
-        return jsonify({'success': False, 'error': 'Внутренняя ошибка сервера'}), 500
-
-@auth_bp.route('/forgot-password', methods=['POST'])
-@auth_bp.route('/api/forgot-password', methods=['POST'])  # Дополнительный маршрут
-def forgot_password():
-    try:
-        data = request.get_json()
-        email = data.get('email')
-        recaptcha_response = data.get('g-recaptcha-response')
-
-        # reCAPTCHA verification (skip if disabled)
-        if not current_app.config.get('RECAPTCHA_DISABLED', False):
-            if not recaptcha_response:
-                current_app.logger.error("Missing reCAPTCHA response")
-                return jsonify({'error': 'Пожалуйста, подтвердите, что вы не робот.'}), 400
-
-            # Verify reCAPTCHA with Google servers
-            recaptcha_verification_url = "https://www.google.com/recaptcha/api/siteverify"
-            verification_payload = {
-                'secret': current_app.config['RECAPTCHA_SECRET_KEY'],
-                'response': recaptcha_response,
-                'remoteip': request.remote_addr
-            }
-
-            try:
-                current_app.logger.info("Verifying reCAPTCHA...")
-                verification_response = requests.post(recaptcha_verification_url, data=verification_payload)
-                verification_result = verification_response.json()
-                
-                if not verification_result.get('success'):
-                    current_app.logger.error(f"reCAPTCHA verification failed: {verification_result.get('error-codes')}")
-                    return jsonify({'error': 'Подтверждение reCAPTCHA не пройдено. Пожалуйста, попробуйте еще раз.'}), 400
-                    
-                current_app.logger.info("✅ reCAPTCHA verification successful")
-            except requests.exceptions.RequestException as e:
-                current_app.logger.error(f"Error communicating with reCAPTCHA API: {e}")
-                return jsonify({'error': 'Не удалось проверить reCAPTCHA. Пожалуйста, попробуйте позже.'}), 500
-        else:
-            current_app.logger.info("⚠️ reCAPTCHA verification skipped (disabled in config)")
-        
-        # Проверяем, существует ли пользователь с таким email
-        result = execute_query(
-            "SELECT id FROM email_auth WHERE email = %s", 
-            (email,), 
-            fetch=True
-        )
-            
-        if not result:
-            return jsonify({'error': 'Пользователь с таким email не найден'}), 404
-        
-        # Генерируем токен для сброса пароля
-        reset_token = bcrypt.gensalt().decode('utf-8')[:32]
-        
-        # Сохраняем токен в базе данных
-        execute_query(
-            "UPDATE email_auth SET reset_token = %s WHERE email = %s",
-            (reset_token, email)
-        )
-        
-        # Отправляем email с инструкциями по восстановлению пароля
-        if send_password_reset_email(email, reset_token):
-            return jsonify({'success': True, 'message': 'Инструкции по восстановлению отправлены на email'}), 200
-        else:
-            return jsonify({'success': False, 'error': 'Ошибка отправки email'}), 500
-        
-    except Exception as e:
-        print(f"Ошибка при восстановлении пароля: {e}")
-        return jsonify({'error': 'Внутренняя ошибка сервера'}), 500
-
-# @auth_bp.route('/reset-password')
-# def reset_password_page():
-#     """Страница сброса пароля"""
-#     token = request.args.get('token')
-#     if not token:
-#         return render_template('auth/reset_password.html', token='', error='Недействительная ссылка')
-#     return render_template('auth/reset_password.html', token=token)
-
-@auth_bp.route('/reset-password', methods=['POST'])
-def reset_password_handler():
-    """Обработка сброса пароля"""
-    try:
-        data = request.get_json()
-        token = data.get('token')
-        new_password = data.get('new_password')
-        confirm_password = data.get('confirm_password')
-        
-        # Валидация данных
-        if not token or not new_password or not confirm_password:
-            return jsonify({'success': False, 'error': 'Не все поля заполнены'}), 400
-        
-        if new_password != confirm_password:
-            return jsonify({'success': False, 'error': 'Пароли не совпадают'}), 400
-        
-        if len(new_password) < 6:
-            return jsonify({'success': False, 'error': 'Пароль должен содержать минимум 6 символов'}), 400
-        
-        # Проверяем токен в базе данных
-        result = execute_query(
-            "SELECT id, email FROM email_auth WHERE reset_token = %s", 
-            (token,), 
-            fetch=True
-        )
-            
-        if not result:
-            return jsonify({'success': False, 'error': 'Недействительный или устаревший токен сброса пароля'}), 400
-        
-        # Хешируем новый пароль
-        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-        
-        # Обновляем пароль и очищаем токен
-        execute_query(
-            "UPDATE email_auth SET password = %s, reset_token = NULL WHERE id = %s",
-            (hashed_password.decode('utf-8'), result['id'])
-        )
-        
-        return jsonify({'success': True, 'message': 'Пароль успешно изменен'}), 200
-        
-    except Exception as e:
-        print(f"Ошибка при сбросе пароля: {e}")
-        return jsonify({'success': False, 'error': 'Внутренняя ошибка сервера'}), 500
-
-# @auth_bp.route('/login') 
-# def login_page():
-#     response = make_response(render_template('auth/login.html', 
-#                                            nonce=g.nonce, 
-#                                            recaptcha_site_key=current_app.config['RECAPTCHA_SITE_KEY'],
-#                                            recaptcha_disabled=current_app.config.get('RECAPTCHA_DISABLED', False)))
-    
-    # Set Content Security Policy
-    csp = (
-        f"default-src 'self'; "
-        f"script-src 'self' 'nonce-{g.nonce}' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-        f"object-src 'none'; "
-        f"style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-        f"style-src-elem 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com 'unsafe-inline'; "
-        f"font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
-        f"img-src 'self' data: https://www.google.com https://www.gstatic.com; "
-        f"connect-src 'self' https://www.google.com https://www.gstatic.com https://www.recaptcha.net; "
-        f"frame-src https://www.google.com https://www.recaptcha.net; "
-        f"base-uri 'self'; "
-        f"frame-ancestors 'self' https://www.google.com; "
-        f"worker-src blob:; "
-        f"child-src blob:;"
+def save_code(subject, purpose, code):
+    now = utcnow()
+    execute_query("DELETE FROM verification_codes WHERE subject=%s AND purpose=%s", (subject, purpose))
+    execute_query(
+        "INSERT INTO verification_codes (subject,purpose,code_hash,expires_at,last_sent_at) VALUES (%s,%s,%s,%s,%s)",
+        (subject, purpose, hash_secret(code), now + timedelta(minutes=current_app.config["OTP_TTL_MINUTES"]), now),
     )
-    response.headers['Content-Security-Policy'] = csp
-    return response
 
-@auth_bp.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
 
-    email = data.get('email')
-    password = data.get('password')
-    recaptcha_response = data.get('g-recaptcha-response')
+def resend_available(subject, purpose):
+    row = execute_query(
+        "SELECT last_sent_at FROM verification_codes WHERE subject=%s AND purpose=%s",
+        (subject, purpose), fetch=True,
+    )
+    if not row:
+        return True
+    sent_at = row["last_sent_at"]
+    if isinstance(sent_at, str):
+        sent_at = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
+    if sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=timezone.utc)
+    return utcnow() >= sent_at + timedelta(seconds=current_app.config["OTP_RESEND_SECONDS"])
 
-    if not email or not password:
-        return jsonify({'error': 'Заполните все поля'}), 400
-    
+
+def check_code(subject, purpose, code):
+    row = execute_query("SELECT id,code_hash,attempts FROM verification_codes WHERE subject=%s AND purpose=%s AND consumed_at IS NULL AND expires_at>CURRENT_TIMESTAMP", (subject, purpose), fetch=True)
+    if not row or row["attempts"] >= current_app.config["OTP_MAX_ATTEMPTS"]:
+        return False
+    if not secrets.compare_digest(row["code_hash"], hash_secret(code)):
+        execute_query("UPDATE verification_codes SET attempts=attempts+1 WHERE id=%s", (row["id"],))
+        return False
+    execute_query("UPDATE verification_codes SET consumed_at=CURRENT_TIMESTAMP WHERE id=%s", (row["id"],))
+    return True
+
+
+@auth_bp.post("/register")
+@rate_limit("register", 5, 3600)
+def register():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    password = data.get("password")
+    confirmation = data.get("confirmPassword") or data.get("confirm_password")
     if not is_valid_email(email):
-        return jsonify({'error': 'Некорректный email'}), 400
+        return error("Некорректный email")
+    if password != confirmation:
+        return error("Пароли не совпадают")
+    if not strong_password(password):
+        return error("Пароль: минимум 10 символов, заглавная и строчная буквы, цифра")
+    if not verify_recaptcha(data.get("g-recaptcha-response")):
+        return error("Подтверждение reCAPTCHA не пройдено")
+    if execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True):
+        return error("Не удалось зарегистрировать аккаунт с указанными данными", 409, "conflict")
 
-    # reCAPTCHA verification (skip if disabled)
-    if not current_app.config.get('RECAPTCHA_DISABLED', False):
-        if not recaptcha_response:
-            current_app.logger.error("Missing reCAPTCHA response")
-            return jsonify({'error': 'Пожалуйста, подтвердите, что вы не робот.'}), 400
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    execute_query("INSERT INTO email_auth(email,password,verified) VALUES(%s,%s,%s)", (email, password_hash, current_app.config["SKIP_EMAIL_VERIFICATION"]))
+    if current_app.config["SKIP_EMAIL_VERIFICATION"]:
+        return jsonify({"success": True, "skip_verification": True, "registration_token": registration_token(email)})
 
-        # Verify reCAPTCHA with Google servers
-        recaptcha_verification_url = "https://www.google.com/recaptcha/api/siteverify"
-        verification_payload = {
-            'secret': current_app.config['RECAPTCHA_SECRET_KEY'],
-            'response': recaptcha_response,
-            'remoteip': request.remote_addr
-        }
+    code = f"{secrets.randbelow(100000):05d}"
+    save_code(email, "email", code)
+    if not send_verification_email(email, code):
+        return error("Не удалось отправить код. Повторите позже", 503, "provider_unavailable")
+    return jsonify({"success": True})
 
-        try:
-            current_app.logger.info("Verifying reCAPTCHA...")
-            verification_response = requests.post(recaptcha_verification_url, data=verification_payload)
-            verification_result = verification_response.json()
-            
-            if not verification_result.get('success'):
-                current_app.logger.error(f"reCAPTCHA verification failed: {verification_result.get('error-codes')}")
-                return jsonify({'error': 'Подтверждение reCAPTCHA не пройдено. Пожалуйста, попробуйте еще раз.'}), 400
-                
-            current_app.logger.info("✅ reCAPTCHA verification successful")
-        except requests.exceptions.RequestException as e:
-            current_app.logger.error(f"Error communicating with reCAPTCHA API: {e}")
-            return jsonify({'error': 'Не удалось проверить reCAPTCHA. Пожалуйста, попробуйте позже.'}), 500
-    else:
-        current_app.logger.info("⚠️ reCAPTCHA verification skipped (disabled in config)")
-        
+
+@auth_bp.post("/resend")
+@rate_limit("email_resend", 3, 3600)
+def resend():
+    email = str((request.get_json(silent=True) or {}).get("email", "")).strip().lower()
+    user = execute_query("SELECT verified FROM email_auth WHERE email=%s", (email,), fetch=True)
+    if not user or user["verified"]:
+        return jsonify({"success": True, "message": "Если аккаунт ожидает подтверждения, код отправлен"})
+    if not resend_available(email, "email"):
+        return error("Повторный код можно запросить позже", 429, "cooldown")
+    code = f"{secrets.randbelow(100000):05d}"
+    save_code(email, "email", code)
+    if not send_verification_email(email, code):
+        return error("Не удалось отправить код. Повторите позже", 503)
+    return jsonify({"success": True})
+
+
+@auth_bp.post("/verify")
+@auth_bp.post("/verify_code")
+@rate_limit("email_verify", 10, 900)
+def verify_email():
+    data = request.get_json(silent=True) or {}
+    email, code = str(data.get("email", "")).strip().lower(), str(data.get("code", ""))
+    if not re.fullmatch(r"\d{5}", code) or not check_code(email, "email", code):
+        return error("Неверный или истёкший код", 400, "invalid_code")
+    execute_query("UPDATE email_auth SET verified=%s,updated_at=CURRENT_TIMESTAMP WHERE email=%s", (True, email))
+    return jsonify({"success": True, "registration_token": registration_token(email)})
+
+
+@auth_bp.post("/complete_registration")
+@rate_limit("complete_registration", 10, 3600)
+def complete_registration():
+    data = request.get_json(silent=True) or {}
+    token = data.get("registration_token", "")
     try:
-        # Получаем пользователя из базы данных
-        result = execute_query(
-            "SELECT * FROM email_auth WHERE email = %s", 
-            (email,), 
-            fetch=True
-        )
-        
-        if not result:
-            return jsonify({'error': 'Пользователь не найден'}), 404
+        email = registration_email(token)
+    except (BadSignature, SignatureExpired):
+        return error("Сессия регистрации истекла", 401, "invalid_registration_token")
+    name, username = str(data.get("name", "")).strip(), str(data.get("username", "")).strip().lower()
+    if not 1 <= len(name) <= 80 or not USERNAME_RE.fullmatch(username):
+        return error("Проверьте имя и username (3–30 латинских символов)")
+    user = execute_query("SELECT id,verified FROM email_auth WHERE email=%s", (email,), fetch=True)
+    if not user or not user["verified"]:
+        return error("Email не подтверждён", 403)
+    if execute_query("SELECT id FROM email_auth WHERE username=%s AND id<>%s", (username, user["id"]), fetch=True):
+        return error("Этот username уже занят", 409, "conflict")
+    execute_query("UPDATE email_auth SET name=%s,username=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s", (name, username, user["id"]))
+    raw, expires = issue_session(user["id"])
+    return jsonify({"success": True, "user": {"id": user["id"], "email": email, "name": name, "username": username, "token": raw}, "expires_at": expires.isoformat()})
 
-        # Проверяем, что email подтвержден
-        if not result.get('verified', False):
-            return jsonify({'error': 'Пожалуйста, подтвердите ваш email перед входом'}), 403
 
-        # Проверяем пароль через bcrypt
-        if not bcrypt.checkpw(password.encode('utf-8'), result['password'].encode('utf-8')):
-            return jsonify({'error': 'Неверный пароль'}), 401
+@auth_bp.post("/login")
+@rate_limit("login", 10, 900)
+def login():
+    data = request.get_json(silent=True) or {}
+    email, password = str(data.get("email", "")).strip().lower(), data.get("password", "")
+    if not verify_recaptcha(data.get("g-recaptcha-response")):
+        return error("Подтверждение reCAPTCHA не пройдено")
+    user = execute_query("SELECT * FROM email_auth WHERE email=%s", (email,), fetch=True)
+    if not user or not bcrypt.checkpw(password.encode(), user["password"].encode()):
+        return error("Неверный email или пароль", 401, "invalid_credentials")
+    if not user["verified"]:
+        return error("Подтвердите email перед входом", 403, "email_unverified")
+    raw, expires = issue_session(user["id"])
+    return jsonify({"success": True, "token": raw, "expires_at": expires.isoformat(), "user": public_user(user, private=True)})
 
-        return jsonify({
-            'success': True,
-            'message': 'Успешный вход', 
-            'redirect': url_for('main.home'),
-            'token': result.get('auth_token', ''),
-            'user': {
-                'id': result.get('id'),
-                'name': result.get('name'),
-                'username': result.get('username'),
-                'email': result.get('email'),
-                'avatar': result.get('avatar'),
-                'banner': result.get('banner')
-            }
-        }), 200
-    except Exception as e:
-        current_app.logger.error(f"Ошибка входа: {str(e)}")
-        return jsonify({'error': 'Внутренняя ошибка сервера'}), 500
 
-# Эндпоинт для проверки токена
-@auth_bp.route('/api/get_user_data', methods=['GET'])
+@auth_bp.post("/logout")
+@auth_required
+def logout():
+    execute_query("UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE token_hash=%s", (hash_secret(bearer_token()),))
+    return jsonify({"success": True})
+
+
+def public_user(user, private=False):
+    result = {"id": user["id"], "name": user.get("name"), "username": user.get("username"), "avatar": user.get("avatar") or "/static/images/default-avatar.png", "bio": user.get("bio") or "", "created_at": user.get("created_at")}
+    if private:
+        result.update({"email": user.get("email"), "phone": user.get("phone"), "phone_verified_at": user.get("phone_verified_at"), "verified": bool(user.get("verified")), "banner": user.get("banner")})
+    return result
+
+
+@auth_bp.get("/api/get_user_data")
+@auth_required
 def get_user_data():
-    auth_token = request.headers.get('Authorization')
-    if not auth_token:
-        return jsonify({'error': 'Требуется авторизация'}), 401
-    
+    return jsonify({"success": True, "user": public_user(g.current_user, private=True)})
+
+
+@auth_bp.post("/forgot-password")
+@auth_bp.post("/api/forgot-password")
+@rate_limit("forgot_password", 5, 3600)
+def forgot_password():
+    data = request.get_json(silent=True) or {}
+    email = str(data.get("email", "")).strip().lower()
+    user = execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True)
+    if user:
+        raw = secrets.token_urlsafe(32)
+        execute_query("INSERT INTO password_resets(user_id,token_hash,expires_at) VALUES(%s,%s,%s)", (user["id"], hash_secret(raw), utcnow()+timedelta(minutes=current_app.config["PASSWORD_RESET_TTL_MINUTES"])))
+        send_password_reset_email(email, raw)
+    return jsonify({"success": True, "message": "Если аккаунт существует, инструкция отправлена"})
+
+
+@auth_bp.post("/reset-password")
+@rate_limit("reset_password", 10, 3600)
+def reset_password():
+    data = request.get_json(silent=True) or {}
+    raw, password, confirmation = data.get("token", ""), data.get("new_password", ""), data.get("confirm_password", "")
+    if password != confirmation or not strong_password(password):
+        return error("Новый пароль не соответствует требованиям")
+    reset = execute_query("SELECT id,user_id FROM password_resets WHERE token_hash=%s AND consumed_at IS NULL AND expires_at>CURRENT_TIMESTAMP", (hash_secret(raw),), fetch=True)
+    if not reset:
+        return error("Ссылка недействительна или истекла", 400, "invalid_token")
+    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
+    with transaction() as cursor:
+        cursor.execute(_query("UPDATE email_auth SET password=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s"), (password_hash, reset["user_id"]))
+        cursor.execute(_query("UPDATE password_resets SET consumed_at=CURRENT_TIMESTAMP WHERE id=%s"), (reset["id"],))
+        cursor.execute(_query("UPDATE sessions SET revoked_at=CURRENT_TIMESTAMP WHERE user_id=%s AND revoked_at IS NULL"), (reset["user_id"],))
+    return jsonify({"success": True, "message": "Пароль изменён"})
+
+
+def send_sms(phone, code):
+    provider = current_app.config["SMS_PROVIDER"]
+    if provider == "webhook" and current_app.config["SMS_WEBHOOK_URL"]:
+        response = requests.post(current_app.config["SMS_WEBHOOK_URL"], json={"to": phone, "from": current_app.config["SMS_FROM"], "message": f"Novogramm code: {code}"}, headers={"Authorization": f"Bearer {current_app.config['SMS_WEBHOOK_TOKEN']}"}, timeout=8)
+        response.raise_for_status()
+        return True
+    if provider == "console" and current_app.config["ENV"] != "production":
+        current_app.logger.warning("Development SMS requested for phone suffix=%s", phone[-4:])
+        return True
+    return False
+
+
+@auth_bp.post("/api/phone/request")
+@auth_required
+@rate_limit("phone_otp", 3, 3600, subject=lambda: str(current_user()["id"]) if current_user() else "anonymous")
+def request_phone_code():
     try:
-        result = execute_query(
-            "SELECT id, name, username, avatar, banner FROM email_auth WHERE auth_token = %s", 
-            (auth_token,), 
-            fetch=True
-        )
-            
-        if result:
-            return jsonify({
-                'success': True,
-                'id': result['id'],
-                'name': result['name'],
-                'username': result['username'],
-                'avatar': result['avatar'] or '/static/images/default-avatar.png',
-                'banner': result['banner'] or '/static/images/default-banner.jpg'
-            }), 200
-        return jsonify({'success': False, 'error': 'Пользователь не найден'}), 404
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-def _get_user_by_token(auth_token: str):
-    """Возвращает строку пользователя по токену или None."""
-    if not auth_token:
-        return None
+        phone = normalize_phone((request.get_json(silent=True) or {}).get("phone", ""))
+    except ValueError as exc:
+        return error(str(exc))
+    owner = execute_query("SELECT id FROM email_auth WHERE phone=%s AND id<>%s", (phone, g.current_user["id"]), fetch=True)
+    if owner:
+        return error("Номер уже используется", 409, "conflict")
+    if not resend_available(phone, "phone"):
+        return error("Повторный код можно запросить позже", 429, "cooldown")
+    code = f"{secrets.randbelow(1000000):06d}"
+    save_code(phone, "phone", code)
     try:
-        result = execute_query(
-            "SELECT id, name, username, avatar FROM email_auth WHERE auth_token = %s",
-            (auth_token,),
-            fetch=True
-        )
-        return result
-    except Exception:
-        return None
+        if not send_sms(phone, code):
+            return error("SMS-провайдер не настроен", 503, "provider_unavailable")
+    except requests.RequestException:
+        return error("SMS временно недоступны", 503, "provider_unavailable")
+    execute_query("UPDATE email_auth SET phone=%s,phone_verified_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=%s", (phone, g.current_user["id"]))
+    return jsonify({"success": True, "message": "Код отправлен"}), 202
 
-@auth_bp.route('/api/posts/<int:post_id>/comments', methods=['POST'])
-def create_comment(post_id: int):
-    """Создать комментарий к посту. Требуется заголовок Authorization с токеном."""
-    try:
-        auth_token = request.headers.get('Authorization')
-        user = _get_user_by_token(auth_token)
-        if not user:
-            return jsonify({'success': False, 'error': 'Требуется авторизация'}), 401
 
-        data = request.get_json(silent=True) or {}
-        content = (data.get('content') or '').strip()
-
-        if not content:
-            return jsonify({'success': False, 'error': 'Текст комментария обязателен'}), 400
-        if len(content) > 1000:
-            return jsonify({'success': False, 'error': 'Комментарий слишком длинный (макс. 1000)'}), 400
-
-        # Проверим, существует ли пост
-        post_check = execute_query("SELECT id FROM posts WHERE id = %s", (post_id,), fetch=True)
-        if not post_check:
-            return jsonify({'success': False, 'error': 'Пост не найден'}), 404
-
-        # Создаем комментарий
-        comment_result = execute_query(
-            "INSERT INTO comments (user_id, post_id, content) VALUES (%s, %s, %s) RETURNING id",
-            (user['id'], post_id, content),
-            fetch=True
-        )
-        comment_id = comment_result['id']
-
-        return jsonify({
-            'success': True,
-            'comment': {
-                'id': comment_id,
-                'post_id': post_id,
-                'user': {
-                    'id': user['id'],
-                    'name': user['name'],
-                    'username': user['username'],
-                    'avatar': user.get('avatar') or '/static/images/default-avatar.png'
-                },
-                'content': content
-            }
-        }), 201
-
-    except Exception as e:
-        current_app.logger.error(f"Ошибка создания комментария: {str(e)}")
-        return jsonify({'success': False, 'error': f'Внутренняя ошибка: {str(e)}'}), 500
-
-@auth_bp.route('/api/posts/<int:post_id>/comments', methods=['GET'])
-def list_comments(post_id: int):
-    """Список комментариев к посту с данными автора."""
-    try:
-        # Убедимся, что пост существует
-        post_check = execute_query("SELECT id FROM posts WHERE id = %s", (post_id,), fetch=True)
-        if not post_check:
-            return jsonify({'success': False, 'error': 'Пост не найден'}), 404
-
-        # Получаем комментарии с данными пользователей
-        comments_data = execute_query(
-            """
-            SELECT c.id, c.content, c.created_at,
-                   u.id AS user_id, u.name, u.username, u.avatar
-            FROM comments c
-            JOIN email_auth u ON u.id = c.user_id
-            WHERE c.post_id = %s
-            ORDER BY c.created_at DESC, c.id DESC
-            """,
-            (post_id,),
-            fetchall=True
-        )
-
-        comments = []
-        for r in comments_data:
-            comments.append({
-                'id': r['id'],
-                'content': r['content'],
-                'created_at': r['created_at'],
-                'user': {
-                    'id': r['user_id'],
-                    'name': r['name'],
-                    'username': r['username'],
-                    'avatar': r['avatar'] or '/static/images/default-avatar.png'
-                }
-            })
-
-        return jsonify({'success': True, 'comments': comments}), 200
-
-    except Exception as e:
-        current_app.logger.error(f"Ошибка получения комментариев: {str(e)}")
-        return jsonify({'success': False, 'error': f'Внутренняя ошибка: {str(e)}'}), 500
+@auth_bp.post("/api/phone/verify")
+@auth_required
+@rate_limit("phone_verify", 10, 900, subject=lambda: str(current_user()["id"]) if current_user() else "anonymous")
+def verify_phone_code():
+    code = str((request.get_json(silent=True) or {}).get("code", ""))
+    phone = execute_query("SELECT phone FROM email_auth WHERE id=%s", (g.current_user["id"],), fetch=True)["phone"]
+    if not phone or not re.fullmatch(r"\d{6}", code) or not check_code(phone, "phone", code):
+        return error("Неверный или истёкший код", 400, "invalid_code")
+    execute_query("UPDATE email_auth SET phone_verified_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=%s", (g.current_user["id"],))
+    return jsonify({"success": True, "phone_verified": True})

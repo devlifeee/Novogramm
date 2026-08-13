@@ -1,49 +1,76 @@
 import os
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+from dotenv import load_dotenv
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=False)
+
+
+def _bool(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
 
 class Config:
-    """
-    Класс конфигурации для Flask-приложения.
-    Все настройки читаются из переменных окружения.
-    """
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'default-dev-secret-key-please-change!')
+    ENV = os.getenv("APP_ENV", "development").lower()
+    TESTING = _bool("TESTING")
+    DEBUG = _bool("DEBUG")
+    SECRET_KEY = os.getenv("SECRET_KEY", "")
 
-    # Настройки загрузки файлов
-    UPLOAD_FOLDER = UPLOAD_FOLDER
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    USE_SQLITE = _bool("USE_SQLITE", ENV != "production")
+    SQLITE_PATH = os.getenv("SQLITE_PATH", str(PROJECT_ROOT / "backend" / "dev.db"))
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
+    PG_HOST = os.getenv("PG_HOST", "")
+    PG_PORT = os.getenv("PG_PORT", "5432")
+    PG_USER = os.getenv("PG_USER", "")
+    PG_PASSWORD = os.getenv("PG_PASSWORD", "")
+    PG_DATABASE = os.getenv("PG_DATABASE", "")
+    PG_SSLMODE = os.getenv("PG_SSLMODE", "prefer" if ENV != "production" else "require")
 
-    # Настройки PostgreSQL
-    PG_HOST = os.environ.get('PG_HOST')
-    PG_PORT = os.environ.get('PG_PORT', '5432')
-    PG_USER = os.environ.get('PG_USER')
-    PG_PASSWORD = os.environ.get('PG_PASSWORD')
-    PG_DATABASE = os.environ.get('PG_DATABASE')
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_REQUEST_BYTES", str(6 * 1024 * 1024)))
+    MAX_POST_LENGTH = int(os.getenv("MAX_POST_LENGTH", "5000"))
+    MAX_COMMENT_LENGTH = int(os.getenv("MAX_COMMENT_LENGTH", "1000"))
+    MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "4000"))
+    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(PROJECT_ROOT / "backend" / "app" / "static" / "uploads"))
+    ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+    CORS_ORIGINS = [v.strip() for v in os.getenv("CORS_ORIGINS", "http://localhost:8888").split(",") if v.strip()]
+    FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8888")
 
-    # Формируем URI для SQLAlchemy
-    if not all([PG_USER, PG_PASSWORD, PG_HOST, PG_DATABASE]):
-        print("WARNING: Один или несколько параметров подключения к базе данных не заданы!")
-        print("Используется запасной SQLAlchemy_DATABASE_URI для разработки.")
-        SQLALCHEMY_DATABASE_URI = "postgresql://dev_user:dev_pass@localhost:5432/dev_db"
-    else:
-        SQLALCHEMY_DATABASE_URI = (
-            f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
-        )
+    SESSION_TTL_HOURS = int(os.getenv("SESSION_TTL_HOURS", "168"))
+    OTP_TTL_MINUTES = int(os.getenv("OTP_TTL_MINUTES", "10"))
+    OTP_RESEND_SECONDS = int(os.getenv("OTP_RESEND_SECONDS", "60"))
+    OTP_MAX_ATTEMPTS = int(os.getenv("OTP_MAX_ATTEMPTS", "5"))
+    PASSWORD_RESET_TTL_MINUTES = int(os.getenv("PASSWORD_RESET_TTL_MINUTES", "30"))
 
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    RECAPTCHA_SITE_KEY = os.getenv("RECAPTCHA_SITE_KEY", "")
+    RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "")
+    RECAPTCHA_DISABLED = _bool("RECAPTCHA_DISABLED", ENV != "production")
+    SKIP_EMAIL_VERIFICATION = _bool("SKIP_EMAIL_VERIFICATION", ENV != "production")
+    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+    EMAIL_USER = os.getenv("EMAIL_USER", "")
+    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
 
-    # Режим отладки Flask
-    DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+    SMS_PROVIDER = os.getenv("SMS_PROVIDER", "disabled").lower()
+    SMS_WEBHOOK_URL = os.getenv("SMS_WEBHOOK_URL", "")
+    SMS_WEBHOOK_TOKEN = os.getenv("SMS_WEBHOOK_TOKEN", "")
+    SMS_FROM = os.getenv("SMS_FROM", "Novogramm")
 
-    # Настройки reCAPTCHA
-    RECAPTCHA_SITE_KEY = os.getenv('RECAPTCHA_SITE_KEY', '')
-    RECAPTCHA_SECRET_KEY = os.getenv('RECAPTCHA_SECRET_KEY', '')
-    RECAPTCHA_DISABLED = os.getenv('RECAPTCHA_DISABLED', 'false').lower() == 'true'
-
-    # Настройки электронной почты (SMTP)
-    SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    SMTP_PORT = int(os.getenv('SMTP_PORT', 587))
-    EMAIL_USER = os.getenv('EMAIL_USER')
-    EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-    SKIP_EMAIL_VERIFICATION = os.getenv('SKIP_EMAIL_VERIFICATION', 'true').lower() == 'true'
+    @classmethod
+    def validate(cls) -> None:
+        errors = []
+        if cls.ENV == "production" and (not cls.SECRET_KEY or cls.SECRET_KEY.startswith("change-me")):
+            errors.append("SECRET_KEY must be a strong, non-default value")
+        if not cls.USE_SQLITE and not cls.DATABASE_URL and not all(
+            [cls.PG_HOST, cls.PG_USER, cls.PG_PASSWORD, cls.PG_DATABASE]
+        ):
+            errors.append("DATABASE_URL or all PG_HOST/PG_USER/PG_PASSWORD/PG_DATABASE values are required")
+        if cls.ENV == "production" and cls.USE_SQLITE:
+            errors.append("USE_SQLITE=false is required in production")
+        if cls.ENV == "production" and cls.RECAPTCHA_DISABLED:
+            errors.append("RECAPTCHA_DISABLED=false is required in production")
+        if cls.ENV == "production" and cls.SKIP_EMAIL_VERIFICATION:
+            errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
+        if errors:
+            raise RuntimeError("Invalid application configuration: " + "; ".join(errors))

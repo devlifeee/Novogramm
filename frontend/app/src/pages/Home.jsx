@@ -342,6 +342,21 @@ const Home = () => {
     setProfilePosts([]);
   };
 
+  const startConversation = async (recipientId) => {
+    try {
+      const response = await authorizedFetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient_id: recipientId })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Не удалось открыть диалог');
+      navigate('/chats', { state: { conversationId: data.conversation_id } });
+    } catch (requestError) {
+      setError(typeof requestError.message === 'string' ? requestError.message : 'Не удалось открыть диалог');
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('authEmail');
@@ -692,13 +707,12 @@ const Home = () => {
                 </div>
 
                 {profileUser.id !== user?.id && (
-                  <button
-                    className={`home-button home-button--primary home-profile-modal__follow ${profileUser.is_following ? 'is-active' : ''}`}
-                    type="button"
-                    onClick={() => handleFollow(profileUser.id)}
-                  >
-                    {profileUser.is_following ? 'Вы подписаны' : 'Подписаться'}
-                  </button>
+                  <div className="home-profile-modal__actions">
+                    <button className={`home-button home-button--primary home-profile-modal__follow ${profileUser.is_following ? 'is-active' : ''}`} type="button" onClick={() => handleFollow(profileUser.id)}>
+                      {profileUser.is_following ? 'Вы подписаны' : 'Подписаться'}
+                    </button>
+                    <button className="home-button home-button--ghost" type="button" onClick={() => startConversation(profileUser.id)}>Написать</button>
+                  </div>
                 )}
 
                 <div className="home-profile-modal__posts">

@@ -60,7 +60,8 @@ export const AuthProvider = ({ children }) => {
       return {
         success: true,
         token: data.token || '',
-        skipVerification: Boolean(data.token),
+        skipVerification: Boolean(data.skip_verification),
+        registrationToken: data.registration_token || '',
         message: data.message || '',
         devCode: data.dev_code || ''
       };
@@ -148,7 +149,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      try {
+        await fetch('/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      } catch (error) {
+        // Local logout still completes when the server is unavailable.
+      }
+    }
     localStorage.removeItem('authToken');
     localStorage.removeItem('authEmail');
     setUser(null);

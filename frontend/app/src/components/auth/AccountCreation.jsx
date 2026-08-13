@@ -13,6 +13,7 @@ const AccountCreation = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const email = location.state?.email || localStorage.getItem('registerEmail');
+  const registrationToken = sessionStorage.getItem('registrationToken') || '';
 
   useEffect(() => {
     if (!email) {
@@ -53,7 +54,7 @@ const AccountCreation = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          email,
+          registration_token: registrationToken,
           name: formData.name,
           username: formData.username
         })
@@ -68,6 +69,7 @@ const AccountCreation = () => {
         }
         localStorage.removeItem('registerEmail');
         localStorage.removeItem('verificationDevCode');
+        sessionStorage.removeItem('registrationToken');
         navigate('/home');
       } else {
         setError(data.error || 'Не удалось завершить регистрацию');

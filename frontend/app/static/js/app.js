@@ -14,8 +14,7 @@ import PrivacyPolicy from '../../src/components/auth/PrivacyPolicy.jsx';
 import ResetPassword from '../../src/components/auth/ResetPassword.jsx';
 import Home from '../../src/pages/Home.jsx';
 import Settings from '../../src/pages/Settings.jsx';
-
-const Chats = () => <div style={{ color: 'white', padding: '20px' }}><h1>Чаты</h1></div>;
+import Chats from '../../src/pages/Chats.jsx';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('authToken');

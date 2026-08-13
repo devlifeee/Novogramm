@@ -8,18 +8,25 @@
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^7.11.0"
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.22.0",
-    "@babel/preset-react": "^7.22.0",
-    "babel-loader": "^9.1.0",
-    "css-loader": "^7.1.2",
-    "html-webpack-plugin": "^5.6.4",
+    "@babel/core": "^8.0.1",
+    "@babel/preset-react": "^8.0.1",
+    "babel-loader": "^10.1.1",
+    "copy-webpack-plugin": "^14.0.0",
+    "css-loader": "^7.1.4",
+    "html-webpack-plugin": "^5.6.8",
     "style-loader": "^4.0.0",
-    "webpack": "^5.88.0",
-    "webpack-cli": "^5.1.0",
-    "webpack-dev-server": "^5.0.4",
-    "copy-webpack-plugin": "^11.0.0" 
+    "webpack": "^5.109.2",
+    "webpack-cli": "^7.2.2",
+    "webpack-dev-server": "^6.0.0"
+  },
+  "overrides": {
+    "ajv": "8.20.0",
+    "fast-uri": "3.1.5",
+    "lodash": "4.18.1",
+    "nanoid": "3.3.17",
+    "postcss": "8.5.26"
   }
 }

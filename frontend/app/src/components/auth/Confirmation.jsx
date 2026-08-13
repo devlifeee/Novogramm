@@ -99,6 +99,9 @@ const Confirmation = () => {
       const data = await response.json();
 
       if (data.success) {
+        if (data.registration_token) {
+          sessionStorage.setItem('registrationToken', data.registration_token);
+        }
         showNotification('Email успешно подтвержден!', 'success');
         localStorage.removeItem('registerEmail');
         localStorage.removeItem('verificationDevCode');
@@ -106,7 +109,7 @@ const Confirmation = () => {
           navigate('/auth/account_creation', { state: { email } });
         }, 2000);
       } else {
-        showNotification(data.error || 'Неверный код подтверждения', 'error');
+        showNotification(typeof data.error === 'string' ? data.error : data.error?.message || 'Неверный код подтверждения', 'error');
         setCode(['', '', '', '', '']);
         inputRefs.current[0]?.focus();
       }

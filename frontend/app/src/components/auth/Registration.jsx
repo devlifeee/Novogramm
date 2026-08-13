@@ -100,12 +100,15 @@ const Register = () => {
 
     if (result.success) {
       localStorage.setItem('registerEmail', formData.email);
+      if (result.registrationToken) {
+        sessionStorage.setItem('registrationToken', result.registrationToken);
+      }
       if (result.devCode) {
         localStorage.setItem('verificationDevCode', result.devCode);
       } else {
         localStorage.removeItem('verificationDevCode');
       }
-      if (result.token || result.skipVerification) {
+      if (result.skipVerification) {
         navigate('/auth/account_creation', { state: { email: formData.email } });
       } else {
         navigate(`/auth/confirmation?email=${encodeURIComponent(formData.email)}`);

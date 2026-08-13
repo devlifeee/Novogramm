@@ -146,6 +146,15 @@
   gap: 14px;
 }
 
+.settings-form__grid > * {
+  min-width: 0;
+}
+
+.settings-form__grid > .settings-button {
+  align-self: end;
+  width: 100%;
+}
+
 .settings-field {
   display: grid;
   gap: 8px;

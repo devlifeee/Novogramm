@@ -1,7 +1,6 @@
-version: '3.8'
 services:
   frontend:
-    image: "node:22"
+    image: "node:22-alpine"
     user: "node"
     working_dir: /app
     environment:
@@ -48,15 +47,14 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:13
+    image: postgres:16-alpine
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DATABASE}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${PG_USER} -d ${PG_DATABASE}"]
       interval: 5s
