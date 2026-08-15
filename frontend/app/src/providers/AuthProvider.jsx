@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { apiUrl } from '../utils/api';
 
 const AuthContext = createContext(null);
 
@@ -35,7 +36,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (email, password, confirmPassword, recaptchaToken = '') => {
     try {
-      const response = await fetch('/register', {
+      const response = await fetch(apiUrl('/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password, recaptchaToken = '') => {
     try {
-      const response = await fetch('/login', {
+      const response = await fetch(apiUrl('/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,7 +107,7 @@ export const AuthProvider = ({ children }) => {
 
   const forgotPassword = async (email, recaptchaToken = '') => {
     try {
-      const response = await fetch('/forgot-password', {
+      const response = await fetch(apiUrl('/forgot-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +129,7 @@ export const AuthProvider = ({ children }) => {
 
   const changePassword = async (token, newPassword, confirmPassword) => {
     try {
-      const response = await fetch('/reset-password', {
+      const response = await fetch(apiUrl('/reset-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -153,7 +154,7 @@ export const AuthProvider = ({ children }) => {
     const token = localStorage.getItem('authToken');
     if (token) {
       try {
-        await fetch('/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+        await fetch(apiUrl('/logout'), { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       } catch (error) {
         // Local logout still completes when the server is unavailable.
       }

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../static/css/home.css';
 import '../../static/css/chats.css';
+import { apiUrl } from '../utils/api';
 
 const token = () => localStorage.getItem('authToken') || '';
 
@@ -14,7 +15,7 @@ const Chats = () => {
   const [error, setError] = useState('');
 
   const api = async (url, options = {}) => {
-    const response = await fetch(url, { ...options, headers: { Authorization: `Bearer ${token()}`, ...(options.headers || {}) } });
+    const response = await fetch(apiUrl(url), { ...options, headers: { Authorization: `Bearer ${token()}`, ...(options.headers || {}) } });
     const data = await response.json();
     if (response.status === 401) {
       localStorage.removeItem('authToken');

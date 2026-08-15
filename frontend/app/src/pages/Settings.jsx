@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../static/css/home.css';
 import '../../static/css/settings.css';
+import { apiUrl } from '../utils/api';
 
 const DEFAULT_AVATAR = '/static/images/default-avatar.png';
 
@@ -57,7 +58,7 @@ const Settings = () => {
     setError('');
 
     try {
-      const response = await fetch('/api/profile', {
+      const response = await fetch(apiUrl('/api/profile'), {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await response.json();
@@ -120,7 +121,7 @@ const Settings = () => {
         bio: form.bio.trim()
       };
 
-      const response = await fetch('/api/profile', {
+      const response = await fetch(apiUrl('/api/profile'), {
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -173,7 +174,7 @@ const Settings = () => {
       const formData = new FormData();
       formData.append('avatar', file);
 
-      const response = await fetch('/api/profile/avatar', {
+      const response = await fetch(apiUrl('/api/profile/avatar'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${authToken}` },
         body: formData

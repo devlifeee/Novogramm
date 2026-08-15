@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import '../../../static/css/auth.css';
+import { apiUrl } from '../../utils/api';
 
 const AccountCreation = () => {
   const [formData, setFormData] = useState({
@@ -48,7 +49,7 @@ const AccountCreation = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch('/complete_registration', {
+      const response = await fetch(apiUrl('/complete_registration'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

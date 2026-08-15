@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../static/css/home.css';
+import { apiUrl } from '../utils/api';
 
 const DEFAULT_AVATAR = '/static/images/default-avatar.png';
 
@@ -57,7 +58,7 @@ const Home = () => {
   const currentAvatar = user?.avatar || DEFAULT_AVATAR;
 
   const authorizedFetch = (url, options = {}) =>
-    fetch(url, {
+    fetch(apiUrl(url), {
       ...options,
       headers: {
         Authorization: authToken,

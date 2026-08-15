@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import '../../../static/css/auth.css';
+import { apiUrl } from '../../utils/api';
 
 const Confirmation = () => {
   const [code, setCode] = useState(['', '', '', '', '']);
@@ -85,7 +86,7 @@ const Confirmation = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('/verify', {
+      const response = await fetch(apiUrl('/verify'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -124,7 +125,7 @@ const Confirmation = () => {
     if (!canResend || !email) return;
 
     try {
-      const response = await fetch('/resend', {
+      const response = await fetch(apiUrl('/resend'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
