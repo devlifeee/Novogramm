@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiUrl } from '../utils/api';
 
 const AuthContext = createContext(null);
+const recaptchaRequired = __RECAPTCHA_REQUIRED__;
 
 const parseJson = async (response) => {
   try {
@@ -34,7 +35,11 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const register = async (email, password, confirmPassword, recaptchaToken = '') => {
+  const register = async (email, password, confirmPassword, recaptchaToken) => {
+    if (recaptchaRequired && !recaptchaToken) {
+      return { success: false, error: 'Подтвердите reCAPTCHA перед отправкой.' };
+    }
+
     try {
       const response = await fetch(apiUrl('/register'), {
         method: 'POST',
@@ -71,7 +76,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (email, password, recaptchaToken = '') => {
+  const login = async (email, password, recaptchaToken) => {
+    if (recaptchaRequired && !recaptchaToken) {
+      return { success: false, error: 'Подтвердите reCAPTCHA перед отправкой.' };
+    }
+
     try {
       const response = await fetch(apiUrl('/login'), {
         method: 'POST',
@@ -105,7 +114,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const forgotPassword = async (email, recaptchaToken = '') => {
+  const forgotPassword = async (email, recaptchaToken) => {
+    if (recaptchaRequired && !recaptchaToken) {
+      return { success: false, error: 'Подтвердите reCAPTCHA перед отправкой.' };
+    }
+
     try {
       const response = await fetch(apiUrl('/forgot-password'), {
         method: 'POST',

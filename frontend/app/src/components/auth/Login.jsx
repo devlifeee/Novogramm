@@ -10,18 +10,20 @@ const Login = () => {
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryError, setRecoveryError] = useState('');
   const [recoverySuccess, setRecoverySuccess] = useState('');
+  const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const navigate = useNavigate();
   const { login, forgotPassword } = useAuth();
   const recaptcha = useRecaptcha();
+  const recoveryRecaptcha = useRecaptcha({ enabled: showPasswordModal });
 
   useEffect(() => {
     if (localStorage.getItem('authToken')) {
       navigate('/home', { replace: true });
     }
-  }, [navigate, recaptcha]);
+  }, [navigate]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -38,19 +40,13 @@ const Login = () => {
       return;
     }
 
-    setIsSubmitting(true);
-
-    let recaptchaToken = '';
-    if (!window.RECAPTCHA_DISABLED && window.grecaptcha) {
-      try {
-        recaptchaToken = await window.grecaptcha.execute();
-      } catch (captchaError) {
-        setError('Ошибка reCAPTCHA. Попробуйте еще раз.');
-        setIsSubmitting(false);
-        return;
-      }
+    const recaptchaToken = recaptcha.getResponse();
+    if (recaptcha.isRequired && !recaptchaToken) {
+      setError(recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      return;
     }
 
+    setIsSubmitting(true);
     const result = await login(formData.email, formData.password, recaptchaToken);
 
     if (result.success) {
@@ -73,10 +69,18 @@ const Login = () => {
       return;
     }
 
-    const result = await forgotPassword(recoveryEmail);
+    const recaptchaToken = recoveryRecaptcha.getResponse();
+    if (recoveryRecaptcha.isRequired && !recaptchaToken) {
+      setRecoveryError(recoveryRecaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      return;
+    }
+
+    setIsRecoverySubmitting(true);
+    const result = await forgotPassword(recoveryEmail, recaptchaToken);
 
     if (result.success) {
       setRecoverySuccess(result.message);
+      recoveryRecaptcha.reset();
       setTimeout(() => {
         setShowPasswordModal(false);
         setRecoveryEmail('');
@@ -84,7 +88,10 @@ const Login = () => {
       }, 3000);
     } else {
       setRecoveryError(result.error);
+      recoveryRecaptcha.reset();
     }
+
+    setIsRecoverySubmitting(false);
   };
 
   return (
@@ -127,6 +134,10 @@ const Login = () => {
               </div>
             </div>
 
+            {recoveryRecaptcha.isRequired && <div className="auth-recaptcha" ref={recoveryRecaptcha.containerRef}></div>}
+            {recoveryRecaptcha.isLoading && <div className="register-form__hint">Загрузка reCAPTCHA...</div>}
+            {recoveryRecaptcha.error && <div className="register-form__error">{recoveryRecaptcha.error}</div>}
+
             {recoveryError && <div id="recovery-error" className="register-form__error">{recoveryError}</div>}
             {recoverySuccess && (
               <div id="recovery-success" className="register-form__error register-form__error--success">
@@ -134,8 +145,14 @@ const Login = () => {
               </div>
             )}
 
-            <button id="send-recovery" className="register-form__submit" type="button" onClick={handlePasswordRecovery}>
-              <span>Отправить инструкции</span>
+            <button
+              id="send-recovery"
+              className="register-form__submit"
+              type="button"
+              onClick={handlePasswordRecovery}
+              disabled={isRecoverySubmitting || (recoveryRecaptcha.isRequired && recoveryRecaptcha.isLoading)}
+            >
+              <span>{isRecoverySubmitting ? 'Отправка...' : 'Отправить инструкции'}</span>
               <i className="fas fa-arrow-right" aria-hidden="true"></i>
             </button>
           </div>
@@ -187,9 +204,18 @@ const Login = () => {
             </div>
           </div>
 
+          {recaptcha.isRequired && <div className="auth-recaptcha" ref={recaptcha.containerRef}></div>}
+          {recaptcha.isLoading && <div className="register-form__hint">Загрузка reCAPTCHA...</div>}
+          {recaptcha.error && <div className="register-form__error">{recaptcha.error}</div>}
+
           {error && <div id="error-message" className="register-form__error">{error}</div>}
 
-          <button type="submit" id="login-button" className="register-form__submit" disabled={isSubmitting}>
+          <button
+            type="submit"
+            id="login-button"
+            className="register-form__submit"
+            disabled={isSubmitting || (recaptcha.isRequired && recaptcha.isLoading)}
+          >
             <span>{isSubmitting ? 'Входим...' : 'Войти'}</span>
             <i className="fas fa-arrow-right" aria-hidden="true"></i>
           </button>

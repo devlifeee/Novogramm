@@ -70,6 +70,8 @@ class Config:
             errors.append("USE_SQLITE=false is required in production")
         if cls.ENV == "production" and cls.RECAPTCHA_DISABLED:
             errors.append("RECAPTCHA_DISABLED=false is required in production")
+        if cls.ENV == "production" and not cls.RECAPTCHA_SECRET_KEY:
+            errors.append("RECAPTCHA_SECRET_KEY is required in production")
         if cls.ENV == "production" and cls.SKIP_EMAIL_VERIFICATION:
             errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
         if errors:

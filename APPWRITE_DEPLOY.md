@@ -20,10 +20,13 @@ Add this build variable to the Site:
 
 ```text
 API_BASE_URL=https://your-api-domain.example
+RECAPTCHA_SITE_KEY=your-v2-checkbox-site-key
 ```
 
+`RECAPTCHA_SITE_KEY` is the public key for a reCAPTCHA **v2 Checkbox** key pair.
 Do not add backend secrets to Site build variables. Values embedded in a frontend
-bundle are public.
+bundle are public. Appwrite reserves `APPWRITE_*` names; these names are intentionally
+non-reserved.
 
 ## Backend runtime variables
 

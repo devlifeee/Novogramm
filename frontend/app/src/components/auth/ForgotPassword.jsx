@@ -1,40 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../../static/css/auth.css';
 import { useAuth } from '../../hooks/useAuth';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const recaptchaRef = useRef(null);
 
   const navigate = useNavigate();
   const { forgotPassword } = useAuth();
-
-  useEffect(() => {
-    const loadRecaptcha = () => {
-      if (window.RECAPTCHA_DISABLED) return;
-
-      const script = document.createElement('script');
-      script.src = 'https://www.recaptcha.net/recaptcha/api.js?render=explicit';
-      script.async = true;
-      script.defer = true;
-      document.head.appendChild(script);
-
-      script.onload = () => {
-        if (window.grecaptcha && recaptchaRef.current) {
-          window.grecaptcha.render(recaptchaRef.current, {
-            sitekey: process.env.REACT_APP_RECAPTCHA_SITE_KEY || window.RECAPTCHA_SITE_KEY,
-            theme: 'dark',
-            size: 'normal'
-          });
-        }
-      };
-    };
-
-    loadRecaptcha();
-  }, []);
+  const recaptcha = useRecaptcha();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -44,15 +21,16 @@ const ForgotPassword = () => {
       return;
     }
 
+    const recaptchaToken = recaptcha.getResponse();
+    if (recaptcha.isRequired && !recaptchaToken) {
+      setMessage({ text: recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.', type: 'error' });
+      return;
+    }
+
     setIsSubmitting(true);
     setMessage({ text: '', type: '' });
 
     try {
-      let recaptchaToken = '';
-      if (!window.RECAPTCHA_DISABLED && window.grecaptcha) {
-        recaptchaToken = await window.grecaptcha.execute();
-      }
-
       const result = await forgotPassword(email, recaptchaToken);
 
       if (result.success) {
@@ -62,15 +40,14 @@ const ForgotPassword = () => {
         });
         setEmail('');
 
-        if (window.grecaptcha) {
-          window.grecaptcha.reset();
-        }
+        recaptcha.reset();
 
         setTimeout(() => {
           navigate('/login');
         }, 3000);
       } else {
         setMessage({ text: result.error, type: 'error' });
+        recaptcha.reset();
       }
     } catch (error) {
       setMessage({ text: 'Ошибка соединения с сервером', type: 'error' });
@@ -118,9 +95,9 @@ const ForgotPassword = () => {
             </div>
           </div>
 
-          {!window.RECAPTCHA_DISABLED && (
-            <div id="recaptcha-placeholder" className="auth-recaptcha" ref={recaptchaRef}></div>
-          )}
+          {recaptcha.isRequired && <div className="auth-recaptcha" ref={recaptcha.containerRef}></div>}
+          {recaptcha.isLoading && <div className="register-form__hint">Загрузка reCAPTCHA...</div>}
+          {recaptcha.error && <div className="register-form__error">{recaptcha.error}</div>}
 
           {message.text && (
             <div
@@ -131,7 +108,11 @@ const ForgotPassword = () => {
             </div>
           )}
 
-          <button type="submit" className="register-form__submit" disabled={isSubmitting}>
+          <button
+            type="submit"
+            className="register-form__submit"
+            disabled={isSubmitting || (recaptcha.isRequired && recaptcha.isLoading)}
+          >
             <span>{isSubmitting ? 'Отправка...' : 'Отправить инструкции'}</span>
             <i className="fas fa-arrow-right" aria-hidden="true"></i>
           </button>

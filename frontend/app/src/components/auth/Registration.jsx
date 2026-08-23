@@ -25,7 +25,7 @@ const Register = () => {
     if (localStorage.getItem('authToken')) {
       navigate('/home', { replace: true });
     }
-  }, [navigate, recaptcha]);
+  }, [navigate]);
 
   const validateField = (name, value) => {
     const nextErrors = {};
@@ -89,13 +89,19 @@ const Register = () => {
       return;
     }
 
+    const recaptchaToken = recaptcha.getResponse();
+    if (recaptcha.isRequired && !recaptchaToken) {
+      setError(recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const result = await register(
       formData.email,
       formData.password,
       formData.confirmPassword,
-      ''
+      recaptchaToken
     );
 
     if (result.success) {
@@ -115,6 +121,7 @@ const Register = () => {
       }
     } else {
       setError(result.error);
+      recaptcha.reset();
     }
 
     setIsSubmitting(false);
@@ -276,13 +283,22 @@ const Register = () => {
             </label>
           </div>
 
+          {recaptcha.isRequired && <div className="auth-recaptcha" ref={recaptcha.containerRef}></div>}
+          {recaptcha.isLoading && <div className="register-form__hint">Загрузка reCAPTCHA...</div>}
+          {recaptcha.error && <div className="register-form__error">{recaptcha.error}</div>}
+
           {error && (
             <div id="error-message" className="register-form__error">
               {error}
             </div>
           )}
 
-          <button type="submit" id="register-button" className="register-form__submit" disabled={isSubmitting}>
+          <button
+            type="submit"
+            id="register-button"
+            className="register-form__submit"
+            disabled={isSubmitting || (recaptcha.isRequired && recaptcha.isLoading)}
+          >
             <span>{isSubmitting ? 'Регистрируем...' : 'Зарегистрироваться'}</span>
             <i className="fas fa-arrow-right" aria-hidden="true"></i>
           </button>

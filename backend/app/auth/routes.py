@@ -204,6 +204,8 @@ def get_user_data():
 def forgot_password():
     data = request.get_json(silent=True) or {}
     email = str(data.get("email", "")).strip().lower()
+    if not verify_recaptcha(data.get("g-recaptcha-response")):
+        return error("Подтверждение reCAPTCHA не пройдено")
     user = execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True)
     if user:
         raw = secrets.token_urlsafe(32)

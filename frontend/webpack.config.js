@@ -1,4 +1,5 @@
 const path = require('path');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const webpack = require('webpack');
 
@@ -55,6 +56,16 @@ module.exports = (env, argv) => {
   plugins: [
     new webpack.DefinePlugin({
       __API_BASE_URL__: JSON.stringify(process.env.API_BASE_URL || ''),
+      __RECAPTCHA_SITE_KEY__: JSON.stringify(process.env.RECAPTCHA_SITE_KEY || ''),
+      __RECAPTCHA_REQUIRED__: JSON.stringify(mode === 'production'),
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, 'app/static/images'),
+          to: 'static/images',
+        },
+      ],
     }),
     new HtmlWebpackPlugin({
       template: './app/static/index.html',
