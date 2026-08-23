@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../static/css/home.css';
-import { apiUrl } from '../utils/api';
+import { apiUrl, mediaUrl } from '../utils/api';
 
 const DEFAULT_AVATAR = '/static/images/default-avatar.png';
 
@@ -29,8 +29,10 @@ const formatPostTime = (value) => {
 const postImageSrc = (post) => {
   if (post.image_data) return `data:image/jpeg;base64,${post.image_data}`;
   if (post.image_data_base64) return `data:image/jpeg;base64,${post.image_data_base64}`;
-  return post.image_path || '';
+  return mediaUrl(post.image_path || '');
 };
+
+const avatarSrc = (avatar) => mediaUrl(avatar || DEFAULT_AVATAR);
 
 const Home = () => {
   const navigate = useNavigate();
@@ -55,7 +57,7 @@ const Home = () => {
   const [error, setError] = useState('');
 
   const authToken = getAuthToken();
-  const currentAvatar = user?.avatar || DEFAULT_AVATAR;
+  const currentAvatar = avatarSrc(user?.avatar);
 
   const authorizedFetch = (url, options = {}) =>
     fetch(apiUrl(url), {
@@ -403,7 +405,7 @@ const Home = () => {
                       type="button"
                       onClick={() => openUserProfile(person.id)}
                     >
-                      <img src={person.avatar || DEFAULT_AVATAR} alt="Аватар" />
+                      <img src={avatarSrc(person.avatar)} alt="Аватар" />
                       <span>
                         <strong>{person.name}</strong>
                         <small>@{person.username}</small>
@@ -562,7 +564,7 @@ const Home = () => {
                       >
                         <img
                           className="home-avatar"
-                          src={post.user_avatar || DEFAULT_AVATAR}
+                          src={avatarSrc(post.user_avatar)}
                           alt="Аватар"
                         />
                         <span className="post-card__author">
@@ -638,7 +640,7 @@ const Home = () => {
                                   <div className="comment-card__user">
                                     <img
                                       className="comment-card__avatar"
-                                      src={comment.user_avatar || post.user_avatar || DEFAULT_AVATAR}
+                                      src={avatarSrc(comment.user_avatar || post.user_avatar)}
                                       alt="Аватар"
                                     />
                                     <div>
@@ -693,7 +695,7 @@ const Home = () => {
             ) : (
               <>
                 <div className="home-profile-modal__header">
-                  <img src={profileUser.avatar || DEFAULT_AVATAR} alt="Аватар" />
+                  <img src={avatarSrc(profileUser.avatar)} alt="Аватар" />
                   <div>
                     <h2>{profileUser.name || 'Пользователь'}</h2>
                     <p>@{profileUser.username || 'username'}</p>

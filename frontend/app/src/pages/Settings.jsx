@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import '../../static/css/home.css';
 import '../../static/css/settings.css';
-import { apiUrl } from '../utils/api';
+import { apiUrl, mediaUrl } from '../utils/api';
 
 const DEFAULT_AVATAR = '/static/images/default-avatar.png';
 
@@ -250,7 +250,7 @@ const Settings = () => {
           </nav>
 
           <button className="home-user-card" type="button" onClick={() => navigate('/settings')}>
-            <img className="home-user-card__avatar" src={form.avatar || DEFAULT_AVATAR} alt="Аватар" />
+            <img className="home-user-card__avatar" src={mediaUrl(form.avatar || DEFAULT_AVATAR)} alt="Аватар" />
             <span className="home-user-card__content">
               <strong>{form.name || 'Профиль'}</strong>
               <small>@{form.username || 'username'}</small>
@@ -265,7 +265,7 @@ const Settings = () => {
           </div>
 
           <div className="settings-avatar">
-            <img src={form.avatar || DEFAULT_AVATAR} alt="Аватар" />
+            <img src={mediaUrl(form.avatar || DEFAULT_AVATAR)} alt="Аватар" />
             <button
               className="settings-button settings-button--primary"
               type="button"

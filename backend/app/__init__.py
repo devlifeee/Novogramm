@@ -1,12 +1,23 @@
 import time
 import uuid
+from pathlib import Path
 
 from flask import Flask, g, jsonify, request
 from flask_cors import CORS
+from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import Config
 from .database import PostgreSQL, database_ready, run_migrations
+
+
+def initialize_upload_directories(app):
+    upload_root = Path(app.config["UPLOAD_DIR"]).expanduser().resolve()
+    upload_root.mkdir(parents=True, exist_ok=True)
+    for category in ("avatars", "posts"):
+        (upload_root / category).mkdir(exist_ok=True)
+    app.config["UPLOAD_DIR"] = str(upload_root)
+    app.config["UPLOAD_FOLDER"] = str(upload_root)
 
 
 def create_app(config_overrides=None):
@@ -17,6 +28,7 @@ def create_app(config_overrides=None):
     Config.validate(app.config)
     if app.config["ENV"] == "production":
         app.logger.info("Email transport: resend")
+    initialize_upload_directories(app)
 
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=False)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)
@@ -46,6 +58,8 @@ def create_app(config_overrides=None):
 
     @app.errorhandler(Exception)
     def unexpected(error):
+        if isinstance(error, HTTPException):
+            return error
         error_id = str(uuid.uuid4())
         app.logger.exception("unhandled_error id=%s request_id=%s", error_id, g.get("request_id"))
         return jsonify({"success": False, "error": {"code": "internal_error", "message": "Внутренняя ошибка", "id": error_id}}), 500

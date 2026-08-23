@@ -46,6 +46,7 @@ RECAPTCHA_DISABLED=false
 RECAPTCHA_SECRET_KEY=...
 RESEND_API_KEY=re_...
 EMAIL_FROM=Novogramm <noreply@your-verified-domain.example>
+UPLOAD_DIR=/data/uploads
 ```
 
 Generate `SECRET_KEY` and `TOKEN_HASH_KEY` independently with at least 32 random
@@ -58,5 +59,20 @@ bytes. Never commit these values.
 3. Create the Appwrite Site with `API_BASE_URL` pointing to the API.
 4. Set the final Site domain in backend `FRONTEND_URL` and `CORS_ORIGINS`.
 5. Rebuild the Site and test registration, login, uploads, posts, and chats.
+
+## Railway persistent uploads
+
+Attach a Railway Volume to the Flask API service (not the Appwrite Site) with
+mount path `/data/uploads`, then set `UPLOAD_DIR=/data/uploads` in that API
+service. Railway mounts volumes as root; if the service is not already running
+as root, also set `RAILWAY_RUN_UID=0` so Flask can create `avatars/` and
+`posts/` at startup. The API continues to return `/static/uploads/...` URLs;
+the frontend resolves those URLs against `API_BASE_URL`, so media is fetched
+from Railway rather than the Appwrite Site.
+
+No database migration or URL rewrite is required. For existing uploads from a
+pre-volume deployment, copy `backend/app/static/uploads/{avatars,posts}` into
+the corresponding directories on the new volume before retiring the old
+deployment; otherwise only those ephemeral files are lost.
 
 The repository `.env` is ignored by Git. `.env.example` is a public template only.

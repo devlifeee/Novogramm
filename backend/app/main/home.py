@@ -1,7 +1,7 @@
 import secrets
 from pathlib import Path
 
-from flask import Blueprint, current_app, g, jsonify, redirect, request
+from flask import Blueprint, abort, current_app, g, jsonify, redirect, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 from app.auth.routes import public_user
@@ -11,6 +11,7 @@ from app.security import auth_required, rate_limit
 
 main = Blueprint("main", __name__)
 IMAGE_SIGNATURES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg", b"GIF87a": "gif", b"GIF89a": "gif", b"RIFF": "webp"}
+UPLOAD_CATEGORIES = {"avatars", "posts"}
 
 
 def error(message, status=400, code="invalid_request"):
@@ -76,6 +77,21 @@ def validated_image(file):
     return "jpg" if detected == "jpg" else detected
 
 
+def upload_directory(category):
+    if category not in UPLOAD_CATEGORIES:
+        raise ValueError("Unknown upload category")
+    return Path(current_app.config["UPLOAD_DIR"]) / category
+
+
+@main.get("/static/uploads/<category>/<filename>")
+def uploaded_media(category, filename):
+    if category not in UPLOAD_CATEGORIES or filename != secure_filename(filename):
+        abort(404)
+    if Path(filename).suffix.lower().lstrip(".") not in current_app.config["ALLOWED_EXTENSIONS"]:
+        abort(404)
+    return send_from_directory(upload_directory(category), filename)
+
+
 @main.post("/api/profile/avatar")
 @auth_required
 @rate_limit("avatar_upload", 10, 3600)
@@ -85,8 +101,7 @@ def upload_avatar():
     except ValueError as exc:
         return error(str(exc))
     file = request.files["avatar"]
-    upload_dir = Path(current_app.config["UPLOAD_FOLDER"]) / "avatars"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    upload_dir = upload_directory("avatars")
     filename = f"{secrets.token_hex(20)}.{extension}"
     file.save(upload_dir / filename)
     avatar = f"/static/uploads/avatars/{filename}"
@@ -123,8 +138,7 @@ def create_post():
             extension = validated_image(image)
         except ValueError as exc:
             return error(str(exc))
-        upload_dir = Path(current_app.config["UPLOAD_FOLDER"]) / "posts"
-        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_dir = upload_directory("posts")
         filename = f"{secrets.token_hex(20)}.{extension}"
         image.save(upload_dir / filename)
         image_path = f"/static/uploads/posts/{filename}"

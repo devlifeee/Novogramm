@@ -32,7 +32,13 @@ class Config:
     MAX_POST_LENGTH = int(os.getenv("MAX_POST_LENGTH", "5000"))
     MAX_COMMENT_LENGTH = int(os.getenv("MAX_COMMENT_LENGTH", "1000"))
     MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "4000"))
-    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", str(PROJECT_ROOT / "backend" / "app" / "static" / "uploads"))
+    # UPLOAD_FOLDER is retained as a fallback for existing local deployments.
+    # Set UPLOAD_DIR to a persistent volume in production.
+    UPLOAD_DIR = os.getenv(
+        "UPLOAD_DIR",
+        os.getenv("UPLOAD_FOLDER", str(PROJECT_ROOT / "backend" / "app" / "static" / "uploads")),
+    )
+    UPLOAD_FOLDER = UPLOAD_DIR
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
     CORS_ORIGINS = [v.strip() for v in os.getenv("CORS_ORIGINS", "http://localhost:8888").split(",") if v.strip()]
     FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:8888")

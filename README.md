@@ -51,6 +51,8 @@ npm --prefix frontend audit --omit=dev
 
 Обязательны `APP_ENV=production`, сильный `SECRET_KEY`, `USE_SQLITE=false`, PostgreSQL credentials или `DATABASE_URL`, `PG_SSLMODE=require`, точный `CORS_ORIGINS`, включённая reCAPTCHA и Resend (`RESEND_API_KEY`, `EMAIL_FROM`). Секреты передаются secret manager платформы, не `.env` в image/repository.
 
+Для Railway uploads создайте Volume на API service с mount path `/data/uploads` и задайте `UPLOAD_DIR=/data/uploads`. Railway volume принадлежит root; при non-root runtime задайте также `RAILWAY_RUN_UID=0`. Flask создаёт `avatars/` и `posts/` при старте и раздаёт их по прежним URL `/static/uploads/...`; Appwrite frontend направляет эти URL на `API_BASE_URL`. `UPLOAD_FOLDER` остаётся fallback для старых local deploys.
+
 SMS OTP поддерживает provider adapter `SMS_PROVIDER=webhook`. Настройте `SMS_WEBHOOK_URL`, `SMS_WEBHOOK_TOKEN` и `SMS_FROM`. Сервер отправляет провайдеру `{to, from, message}`; ключ никогда не попадает во frontend. `console` разрешён только вне production и намеренно не выводит OTP в лог. Appwrite не добавлен: существующая email/password auth архитектура не выигрывает от переноса, а PostgreSQL остаётся основной БД. Appwrite можно подключить за webhook-adapter без изменения application schema.
 
 Запуск backend в production:
@@ -59,7 +61,7 @@ SMS OTP поддерживает provider adapter `SMS_PROVIDER=webhook`. Нас
 gunicorn run:app --bind 0.0.0.0:3000 --workers 2 --threads 4 --timeout 30
 ```
 
-Reverse proxy обязан завершать HTTPS, ограничивать request body не выше `MAX_REQUEST_BYTES`, проксировать `/api`, auth endpoints и `/static/uploads`, а frontend раздавать как статический production build. Не публикуйте PostgreSQL port наружу.
+Reverse proxy обязан завершать HTTPS, ограничивать request body не выше `MAX_REQUEST_BYTES`, проксировать `/api`, auth endpoints и `/static/uploads`, а frontend раздавать как статический production build. Не публикуйте PostgreSQL port наружу. При переходе с filesystem без volume URL в PostgreSQL менять не нужно: скопируйте `backend/app/static/uploads/{avatars,posts}` в Volume до отключения старого deployment.
 
 ## Backup и восстановление
 
