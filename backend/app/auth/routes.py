@@ -82,6 +82,14 @@ def check_code(subject, purpose, code):
     return True
 
 
+def deliver_verification_code(email):
+    code = f"{secrets.randbelow(100000):05d}"
+    if not send_verification_email(email, code):
+        return False
+    save_code(email, "email", code)
+    return True
+
+
 @auth_bp.post("/register")
 @rate_limit("register", 5, 3600)
 def register():
@@ -97,17 +105,22 @@ def register():
         return error("Пароль: минимум 10 символов, заглавная и строчная буквы, цифра")
     if not verify_recaptcha(data.get("g-recaptcha-response")):
         return error("Подтверждение reCAPTCHA не пройдено")
-    if execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True):
-        return error("Не удалось зарегистрировать аккаунт с указанными данными", 409, "conflict")
+    existing_user = execute_query("SELECT verified FROM email_auth WHERE email=%s", (email,), fetch=True)
+    if existing_user:
+        if existing_user["verified"]:
+            return error("Не удалось зарегистрировать аккаунт с указанными данными", 409, "conflict")
+        if not resend_available(email, "email"):
+            return error("Аккаунт ожидает подтверждения. Повторный код можно запросить позже", 429, "cooldown")
+        if not deliver_verification_code(email):
+            return error("Не удалось отправить код. Повторите позже", 503, "provider_unavailable")
+        return jsonify({"success": True, "message": "Код подтверждения отправлен повторно"})
 
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
     execute_query("INSERT INTO email_auth(email,password,verified) VALUES(%s,%s,%s)", (email, password_hash, current_app.config["SKIP_EMAIL_VERIFICATION"]))
     if current_app.config["SKIP_EMAIL_VERIFICATION"]:
         return jsonify({"success": True, "skip_verification": True, "registration_token": registration_token(email)})
 
-    code = f"{secrets.randbelow(100000):05d}"
-    save_code(email, "email", code)
-    if not send_verification_email(email, code):
+    if not deliver_verification_code(email):
         return error("Не удалось отправить код. Повторите позже", 503, "provider_unavailable")
     return jsonify({"success": True})
 
@@ -121,9 +134,7 @@ def resend():
         return jsonify({"success": True, "message": "Если аккаунт ожидает подтверждения, код отправлен"})
     if not resend_available(email, "email"):
         return error("Повторный код можно запросить позже", 429, "cooldown")
-    code = f"{secrets.randbelow(100000):05d}"
-    save_code(email, "email", code)
-    if not send_verification_email(email, code):
+    if not deliver_verification_code(email):
         return error("Не удалось отправить код. Повторите позже", 503)
     return jsonify({"success": True})
 
@@ -209,8 +220,8 @@ def forgot_password():
     user = execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True)
     if user:
         raw = secrets.token_urlsafe(32)
-        execute_query("INSERT INTO password_resets(user_id,token_hash,expires_at) VALUES(%s,%s,%s)", (user["id"], hash_secret(raw), utcnow()+timedelta(minutes=current_app.config["PASSWORD_RESET_TTL_MINUTES"])))
-        send_password_reset_email(email, raw)
+        if send_password_reset_email(email, raw):
+            execute_query("INSERT INTO password_resets(user_id,token_hash,expires_at) VALUES(%s,%s,%s)", (user["id"], hash_secret(raw), utcnow()+timedelta(minutes=current_app.config["PASSWORD_RESET_TTL_MINUTES"])))
     return jsonify({"success": True, "message": "Если аккаунт существует, инструкция отправлена"})
 
 

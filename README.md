@@ -49,7 +49,7 @@ npm --prefix frontend audit --omit=dev
 
 ## Production configuration
 
-Обязательны `APP_ENV=production`, сильный `SECRET_KEY`, `USE_SQLITE=false`, PostgreSQL credentials или `DATABASE_URL`, `PG_SSLMODE=require`, точный `CORS_ORIGINS`, включённая reCAPTCHA и SMTP. Секреты передаются secret manager платформы, не `.env` в image/repository.
+Обязательны `APP_ENV=production`, сильный `SECRET_KEY`, `USE_SQLITE=false`, PostgreSQL credentials или `DATABASE_URL`, `PG_SSLMODE=require`, точный `CORS_ORIGINS`, включённая reCAPTCHA и Resend (`RESEND_API_KEY`, `EMAIL_FROM`). Секреты передаются secret manager платформы, не `.env` в image/repository.
 
 SMS OTP поддерживает provider adapter `SMS_PROVIDER=webhook`. Настройте `SMS_WEBHOOK_URL`, `SMS_WEBHOOK_TOKEN` и `SMS_FROM`. Сервер отправляет провайдеру `{to, from, message}`; ключ никогда не попадает во frontend. `console` разрешён только вне production и намеренно не выводит OTP в лог. Appwrite не добавлен: существующая email/password auth архитектура не выигрывает от переноса, а PostgreSQL остаётся основной БД. Appwrite можно подключить за webhook-adapter без изменения application schema.
 

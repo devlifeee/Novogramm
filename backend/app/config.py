@@ -47,10 +47,8 @@ class Config:
     RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "")
     RECAPTCHA_DISABLED = _bool("RECAPTCHA_DISABLED", ENV != "production")
     SKIP_EMAIL_VERIFICATION = _bool("SKIP_EMAIL_VERIFICATION", ENV != "production")
-    SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-    SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-    EMAIL_USER = os.getenv("EMAIL_USER", "")
-    EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "")
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "disabled").lower()
     SMS_WEBHOOK_URL = os.getenv("SMS_WEBHOOK_URL", "")
@@ -74,5 +72,9 @@ class Config:
             errors.append("RECAPTCHA_SECRET_KEY is required in production")
         if cls.ENV == "production" and cls.SKIP_EMAIL_VERIFICATION:
             errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
+        if cls.ENV == "production" and not cls.RESEND_API_KEY:
+            errors.append("RESEND_API_KEY is required in production")
+        if cls.ENV == "production" and not cls.EMAIL_FROM:
+            errors.append("EMAIL_FROM is required in production")
         if errors:
             raise RuntimeError("Invalid application configuration: " + "; ".join(errors))
