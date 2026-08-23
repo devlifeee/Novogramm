@@ -6,12 +6,13 @@ from werkzeug.utils import secure_filename
 
 from app.auth.routes import public_user
 from app.database import USE_SQLITE, _query, execute_query, transaction
-from app.security import auth_required, rate_limit
+from app.security import admin_required, auth_required, rate_limit
 
 
 main = Blueprint("main", __name__)
 IMAGE_SIGNATURES = {b"\x89PNG\r\n\x1a\n": "png", b"\xff\xd8\xff": "jpg", b"GIF87a": "gif", b"GIF89a": "gif", b"RIFF": "webp"}
 UPLOAD_CATEGORIES = {"avatars", "posts"}
+MODERATION_REASONS = {"prohibited_content", "spam", "harassment", "other"}
 
 
 def error(message, status=400, code="invalid_request"):
@@ -83,6 +84,24 @@ def upload_directory(category):
     return Path(current_app.config["UPLOAD_DIR"]) / category
 
 
+def delete_post_upload(image_path):
+    prefix = "/static/uploads/posts/"
+    if not image_path or not image_path.startswith(prefix):
+        return
+    filename = image_path[len(prefix):]
+    if filename != secure_filename(filename) or Path(filename).name != filename:
+        current_app.logger.warning("Refused unsafe moderated post image path")
+        return
+    posts_directory = upload_directory("posts").resolve()
+    target = (posts_directory / filename).resolve()
+    if target.parent != posts_directory or not target.is_file():
+        return
+    try:
+        target.unlink()
+    except OSError as error:
+        current_app.logger.warning("Could not remove moderated post image: %s", type(error).__name__)
+
+
 @main.get("/static/uploads/<category>/<filename>")
 def uploaded_media(category, filename):
     if category not in UPLOAD_CATEGORIES or filename != secure_filename(filename):
@@ -116,6 +135,7 @@ SELECT p.id,p.user_id,p.content,p.image_path,p.created_at,p.updated_at,
  (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id) AS comments_count,
  EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id=p.id AND l.user_id=%s) AS is_liked
 FROM posts p JOIN email_auth u ON u.id=p.user_id
+WHERE p.deleted_at IS NULL
 """
 
 
@@ -143,7 +163,7 @@ def create_post():
         image.save(upload_dir / filename)
         image_path = f"/static/uploads/posts/{filename}"
     inserted = execute_query("INSERT INTO posts(user_id,content,image_path) VALUES(%s,%s,%s) RETURNING id", (g.current_user["id"], content, image_path), fetch=True)
-    row = execute_query(POST_SELECT + " WHERE p.id=%s", (g.current_user["id"], inserted["id"]), fetch=True)
+    row = execute_query(POST_SELECT + " AND p.id=%s", (g.current_user["id"], inserted["id"]), fetch=True)
     return jsonify({"success": True, "post": serialize_post(row)}), 201
 
 
@@ -165,7 +185,7 @@ def list_posts():
 @main.get("/api/posts/<int:post_id>")
 @auth_required
 def get_post(post_id):
-    row = execute_query(POST_SELECT + " WHERE p.id=%s", (g.current_user["id"], post_id), fetch=True)
+    row = execute_query(POST_SELECT + " AND p.id=%s", (g.current_user["id"], post_id), fetch=True)
     return jsonify({"success": True, "post": serialize_post(row)}) if row else error("Пост не найден", 404, "not_found")
 
 
@@ -175,7 +195,7 @@ def edit_post(post_id):
     content = str((request.get_json(silent=True) or {}).get("content", "")).strip()
     if not 1 <= len(content) <= current_app.config["MAX_POST_LENGTH"]:
         return error("Некорректный текст поста")
-    result = execute_query("UPDATE posts SET content=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND user_id=%s RETURNING id", (content, post_id, g.current_user["id"]), fetch=True)
+    result = execute_query("UPDATE posts SET content=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND user_id=%s AND deleted_at IS NULL RETURNING id", (content, post_id, g.current_user["id"]), fetch=True)
     if result:
         return jsonify({"success": True})
     return error("Пост не найден или недоступен", 404, "not_found")
@@ -184,15 +204,45 @@ def edit_post(post_id):
 @main.delete("/api/posts/<int:post_id>")
 @auth_required
 def delete_post(post_id):
-    result = execute_query("DELETE FROM posts WHERE id=%s AND user_id=%s RETURNING id", (post_id, g.current_user["id"]), fetch=True)
+    result = execute_query("DELETE FROM posts WHERE id=%s AND user_id=%s AND deleted_at IS NULL RETURNING id", (post_id, g.current_user["id"]), fetch=True)
     return (jsonify({"success": True}), 200) if result else error("Пост не найден или недоступен", 404, "not_found")
+
+
+@main.delete("/api/posts/<int:post_id>/moderate")
+@admin_required
+def moderate_post(post_id):
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason")
+    if reason is not None:
+        reason = str(reason).strip()
+        if not reason:
+            reason = None
+        elif reason not in MODERATION_REASONS:
+            return error("Недопустимая причина модерации")
+
+    with transaction() as cursor:
+        cursor.execute(_query("SELECT id,user_id,image_path FROM posts WHERE id=%s AND deleted_at IS NULL"), (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return error("Пост не найден", 404, "not_found")
+        post = dict(post)
+        cursor.execute(
+            _query("UPDATE posts SET deleted_at=CURRENT_TIMESTAMP,moderated_by=%s,moderation_reason=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s"),
+            (g.current_user["id"], reason, post_id),
+        )
+        cursor.execute(
+            _query("INSERT INTO post_moderation_audit(moderator_user_id,post_id,post_author_id,reason) VALUES(%s,%s,%s,%s)"),
+            (g.current_user["id"], post_id, post["user_id"], reason),
+        )
+    delete_post_upload(post["image_path"])
+    return jsonify({"success": True})
 
 
 @main.post("/api/like_post/<int:post_id>")
 @auth_required
 @rate_limit("like", 120, 60, subject=lambda: str(g.current_user["id"]))
 def toggle_like(post_id):
-    if not execute_query("SELECT id FROM posts WHERE id=%s", (post_id,), fetch=True):
+    if not execute_query("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,), fetch=True):
         return error("Пост не найден", 404, "not_found")
     with transaction() as cursor:
         cursor.execute(_query("SELECT 1 FROM post_likes WHERE user_id=%s AND post_id=%s"), (g.current_user["id"], post_id))
@@ -216,7 +266,7 @@ def create_comment(post_id):
     content = str((request.get_json(silent=True) or {}).get("content", "")).strip()
     if not 1 <= len(content) <= current_app.config["MAX_COMMENT_LENGTH"]:
         return error("Некорректный текст комментария")
-    if not execute_query("SELECT id FROM posts WHERE id=%s", (post_id,), fetch=True):
+    if not execute_query("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,), fetch=True):
         return error("Пост не найден", 404, "not_found")
     row = execute_query("INSERT INTO comments(user_id,post_id,content) VALUES(%s,%s,%s) RETURNING id,created_at", (g.current_user["id"], post_id, content), fetch=True)
     response = {"success": True, "id": row["id"], "post_id": post_id, "user_id": g.current_user["id"], "user_name": g.current_user["name"], "user_username": g.current_user["username"], "user_avatar": g.current_user.get("avatar") or "/static/images/default-avatar.png", "content": content, "created_at": serialize_time(row)}
@@ -227,6 +277,8 @@ def create_comment(post_id):
 @main.get("/api/posts/<int:post_id>/comments")
 @auth_required
 def comments(post_id):
+    if not execute_query("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,), fetch=True):
+        return error("Пост не найден", 404, "not_found")
     try:
         limit, offset = pagination(50, 100)
     except ValueError as exc:
@@ -298,7 +350,7 @@ def get_user(user_id):
 @main.get("/api/get_user_posts/<int:user_id>")
 @auth_required
 def user_posts(user_id):
-    rows = execute_query(POST_SELECT + " WHERE p.user_id=%s ORDER BY p.created_at DESC LIMIT 100", (g.current_user["id"], user_id), fetchall=True)
+    rows = execute_query(POST_SELECT + " AND p.user_id=%s ORDER BY p.created_at DESC LIMIT 100", (g.current_user["id"], user_id), fetchall=True)
     return jsonify([serialize_post(row) for row in rows])
 
 

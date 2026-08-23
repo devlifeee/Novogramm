@@ -199,7 +199,7 @@ def logout():
 def public_user(user, private=False):
     result = {"id": user["id"], "name": user.get("name"), "username": user.get("username"), "avatar": user.get("avatar") or "/static/images/default-avatar.png", "bio": user.get("bio") or "", "created_at": user.get("created_at")}
     if private:
-        result.update({"email": user.get("email"), "phone": user.get("phone"), "phone_verified_at": user.get("phone_verified_at"), "verified": bool(user.get("verified")), "banner": user.get("banner")})
+        result.update({"email": user.get("email"), "phone": user.get("phone"), "phone_verified_at": user.get("phone_verified_at"), "verified": bool(user.get("verified")), "is_admin": bool(user.get("is_admin")), "banner": user.get("banner")})
     return result
 
 

@@ -49,7 +49,7 @@ def current_user():
     return execute_query(
         """
         SELECT u.id, u.email, u.name, u.username, u.phone, u.phone_verified_at,
-               u.verified, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
+               u.verified, u.is_admin, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
         FROM sessions s JOIN email_auth u ON u.id=s.user_id
         WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP
         """,
@@ -63,6 +63,19 @@ def auth_required(view):
         user = current_user()
         if not user:
             return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Требуется авторизация"}}), 401
+        g.current_user = user
+        return view(*args, **kwargs)
+    return wrapped
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user = current_user()
+        if not user:
+            return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Требуется авторизация"}}), 401
+        if not user.get("is_admin"):
+            return jsonify({"success": False, "error": {"code": "forbidden", "message": "Требуются права администратора"}}), 403
         g.current_user = user
         return view(*args, **kwargs)
     return wrapped

@@ -54,6 +54,7 @@ const Home = () => {
   const [profileUser, setProfileUser] = useState(null);
   const [profilePosts, setProfilePosts] = useState([]);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [moderatingPostId, setModeratingPostId] = useState(null);
   const [error, setError] = useState('');
 
   const authToken = getAuthToken();
@@ -218,6 +219,36 @@ const Home = () => {
       );
     } catch (requestError) {
       setError('Не удалось обновить лайк.');
+    }
+  };
+
+  const handleModeratePost = async (postId) => {
+    if (!window.confirm('Удалить этот пост за нарушение правил?')) return;
+
+    setModeratingPostId(postId);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/posts/${postId}/moderate`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        const message = typeof data.error === 'string' ? data.error : data.error?.message;
+        throw new Error(message || 'Не удалось удалить пост');
+      }
+
+      setPosts((current) => current.filter((post) => post.id !== postId));
+      setProfilePosts((current) => current.filter((post) => post.id !== postId));
+      setCommentsByPost((current) => {
+        const { [postId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось удалить пост.');
+    } finally {
+      setModeratingPostId(null);
     }
   };
 
@@ -583,6 +614,17 @@ const Home = () => {
                     </div>
 
                     <div className="post-card__actions">
+                      {user?.is_admin && (
+                        <button
+                          className="post-card__action"
+                          type="button"
+                          onClick={() => handleModeratePost(post.id)}
+                          disabled={moderatingPostId === post.id}
+                        >
+                          <i className="far fa-trash-alt" />
+                          <span>{moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}</span>
+                        </button>
+                      )}
                       <button
                         className={`post-card__action ${post.is_liked ? 'is-liked' : ''}`}
                         type="button"
@@ -736,6 +778,16 @@ const Home = () => {
                             <span><i className="far fa-heart" /> {post.likes_count || 0}</span>
                             <span><i className="far fa-comment" /> {post.comments_count || 0}</span>
                             <time>{formatPostTime(post.created_at)}</time>
+                            {user?.is_admin && (
+                              <button
+                                className="post-card__action"
+                                type="button"
+                                onClick={() => handleModeratePost(post.id)}
+                                disabled={moderatingPostId === post.id}
+                              >
+                                {moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}
+                              </button>
+                            )}
                           </div>
                         </article>
                       );
