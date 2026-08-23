@@ -91,7 +91,7 @@ const Register = () => {
 
     const recaptchaToken = recaptcha.getResponse();
     if (recaptcha.isRequired && !recaptchaToken) {
-      setError(recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      if (!recaptcha.error) setError('Подтвердите reCAPTCHA перед отправкой.');
       return;
     }
 

@@ -23,7 +23,7 @@ const ForgotPassword = () => {
 
     const recaptchaToken = recaptcha.getResponse();
     if (recaptcha.isRequired && !recaptchaToken) {
-      setMessage({ text: recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.', type: 'error' });
+      if (!recaptcha.error) setMessage({ text: 'Подтвердите reCAPTCHA перед отправкой.', type: 'error' });
       return;
     }
 

@@ -16,7 +16,7 @@ const Login = () => {
 
   const navigate = useNavigate();
   const { login, forgotPassword } = useAuth();
-  const recaptcha = useRecaptcha();
+  const recaptcha = useRecaptcha({ enabled: !showPasswordModal });
   const recoveryRecaptcha = useRecaptcha({ enabled: showPasswordModal });
 
   useEffect(() => {
@@ -42,7 +42,7 @@ const Login = () => {
 
     const recaptchaToken = recaptcha.getResponse();
     if (recaptcha.isRequired && !recaptchaToken) {
-      setError(recaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      if (!recaptcha.error) setError('Подтвердите reCAPTCHA перед отправкой.');
       return;
     }
 
@@ -71,7 +71,7 @@ const Login = () => {
 
     const recaptchaToken = recoveryRecaptcha.getResponse();
     if (recoveryRecaptcha.isRequired && !recaptchaToken) {
-      setRecoveryError(recoveryRecaptcha.error || 'Подтвердите reCAPTCHA перед отправкой.');
+      if (!recoveryRecaptcha.error) setRecoveryError('Подтвердите reCAPTCHA перед отправкой.');
       return;
     }
 

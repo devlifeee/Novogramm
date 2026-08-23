@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 const RECAPTCHA_SCRIPT_URL = 'https://www.recaptcha.net/recaptcha/api.js?render=explicit';
+const RECAPTCHA_SITE_KEY = typeof __RECAPTCHA_SITE_KEY__ === 'string'
+  ? __RECAPTCHA_SITE_KEY__.trim()
+  : '';
 let recaptchaScriptPromise;
 
 const loadRecaptcha = () => {
@@ -14,8 +17,10 @@ const loadRecaptcha = () => {
       script.src = RECAPTCHA_SCRIPT_URL;
       script.async = true;
       script.defer = true;
-      script.onload = () => window.grecaptcha ? resolve(window.grecaptcha) : reject(new Error('reCAPTCHA did not initialize'));
-      script.onerror = () => reject(new Error('reCAPTCHA failed to load'));
+      script.onload = () => window.grecaptcha
+        ? resolve(window.grecaptcha)
+        : reject(new Error('reCAPTCHA API loaded without window.grecaptcha'));
+      script.onerror = () => reject(new Error('reCAPTCHA API script failed to load'));
       document.head.appendChild(script);
     });
   }
@@ -23,10 +28,32 @@ const loadRecaptcha = () => {
   return recaptchaScriptPromise;
 };
 
+const waitForRecaptchaReady = (grecaptcha) => new Promise((resolve, reject) => {
+  if (typeof grecaptcha.render !== 'function') {
+    reject(new Error('reCAPTCHA API initialized without grecaptcha.render'));
+    return;
+  }
+
+  if (typeof grecaptcha.ready !== 'function') {
+    resolve(grecaptcha);
+    return;
+  }
+
+  try {
+    grecaptcha.ready(() => resolve(grecaptcha));
+  } catch (error) {
+    reject(error);
+  }
+});
+
+const errorMessage = (error) => error instanceof Error ? error.message : String(error);
+
 export const useRecaptcha = ({ enabled = true } = {}) => {
   const containerRef = useRef(null);
   const widgetIdRef = useRef(null);
   const tokenRef = useRef('');
+  const mountedRef = useRef(false);
+  const renderAttemptRef = useRef(0);
   const isRequired = __RECAPTCHA_REQUIRED__ && enabled;
   const [isLoading, setIsLoading] = useState(isRequired);
   const [error, setError] = useState('');
@@ -40,58 +67,86 @@ export const useRecaptcha = ({ enabled = true } = {}) => {
   }, []);
 
   useEffect(() => {
-    let active = true;
+    mountedRef.current = true;
+    const renderAttempt = ++renderAttemptRef.current;
+    const isCurrentAttempt = () => mountedRef.current && renderAttempt === renderAttemptRef.current;
 
     if (!isRequired) {
       tokenRef.current = '';
       widgetIdRef.current = null;
       setIsLoading(false);
       setError('');
-      return undefined;
+      return () => {
+        mountedRef.current = false;
+      };
     }
 
-    if (!__RECAPTCHA_SITE_KEY__) {
+    if (!RECAPTCHA_SITE_KEY) {
       setIsLoading(false);
-      setError('reCAPTCHA не настроена. Обратитесь к администратору.');
-      return undefined;
+      setError('RECAPTCHA_SITE_KEY is missing from the production build. Set the public Appwrite build variable and rebuild the Site.');
+      return () => {
+        mountedRef.current = false;
+      };
     }
 
     setIsLoading(true);
     setError('');
 
     loadRecaptcha()
+      .then(waitForRecaptchaReady)
       .then((grecaptcha) => {
-        if (!active || !containerRef.current) return;
+        if (!isCurrentAttempt()) return;
 
-        widgetIdRef.current = grecaptcha.render(containerRef.current, {
-          sitekey: __RECAPTCHA_SITE_KEY__,
-          theme: 'dark',
-          size: 'normal',
-          callback: (token) => {
-            tokenRef.current = token;
-            if (active) setError('');
-          },
-          'expired-callback': () => {
-            tokenRef.current = '';
-            if (active) setError('Срок действия проверки reCAPTCHA истёк. Подтвердите её снова.');
-          },
-          'error-callback': () => {
-            tokenRef.current = '';
-            if (active) setError('Не удалось выполнить проверку reCAPTCHA. Попробуйте ещё раз.');
-          },
-        });
-        if (active) setIsLoading(false);
+        const container = containerRef.current;
+        if (!container) {
+          throw new Error('reCAPTCHA container was not mounted');
+        }
+
+        const existingWidgetId = container.dataset.recaptchaWidgetId;
+        if (existingWidgetId !== undefined) {
+          widgetIdRef.current = Number(existingWidgetId);
+          setIsLoading(false);
+          return;
+        }
+
+        try {
+          widgetIdRef.current = grecaptcha.render(container, {
+            sitekey: RECAPTCHA_SITE_KEY,
+            theme: 'dark',
+            size: 'normal',
+            callback: (token) => {
+              if (!mountedRef.current || containerRef.current !== container) return;
+              tokenRef.current = token;
+              setError('');
+            },
+            'expired-callback': () => {
+              if (!mountedRef.current || containerRef.current !== container) return;
+              tokenRef.current = '';
+              setError('Срок действия проверки reCAPTCHA истёк. Подтвердите её снова.');
+            },
+            'error-callback': () => {
+              if (!mountedRef.current || containerRef.current !== container) return;
+              tokenRef.current = '';
+              setError('Не удалось выполнить проверку reCAPTCHA. Попробуйте ещё раз.');
+            },
+          });
+          container.dataset.recaptchaWidgetId = String(widgetIdRef.current);
+          setIsLoading(false);
+        } catch (renderError) {
+          console.error('reCAPTCHA render failed', renderError);
+          throw new Error(`reCAPTCHA render failed: ${errorMessage(renderError)}`);
+        }
       })
-      .catch(() => {
-        if (!active) return;
+      .catch((recaptchaError) => {
+        if (!isCurrentAttempt()) return;
+        console.error('reCAPTCHA initialization failed', recaptchaError);
         setIsLoading(false);
-        setError('Не удалось загрузить reCAPTCHA. Проверьте соединение, обновите страницу и попробуйте ещё раз.');
+        setError(errorMessage(recaptchaError));
       });
 
     return () => {
-      active = false;
+      mountedRef.current = false;
       tokenRef.current = '';
-      widgetIdRef.current = null;
     };
   }, [isRequired]);
 
