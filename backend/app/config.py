@@ -56,25 +56,32 @@ class Config:
     SMS_FROM = os.getenv("SMS_FROM", "Novogramm")
 
     @classmethod
-    def validate(cls) -> None:
+    def validate(cls, settings=None) -> None:
+        """Validate either the class defaults or the active Flask configuration."""
+        def value(name):
+            if settings is None:
+                return getattr(cls, name)
+            return settings[name]
+
         errors = []
-        if cls.ENV == "production" and (not cls.SECRET_KEY or cls.SECRET_KEY.startswith("change-me")):
+        environment = str(value("ENV")).lower()
+        if environment == "production" and (not value("SECRET_KEY") or value("SECRET_KEY").startswith("change-me")):
             errors.append("SECRET_KEY must be a strong, non-default value")
-        if not cls.USE_SQLITE and not cls.DATABASE_URL and not all(
-            [cls.PG_HOST, cls.PG_USER, cls.PG_PASSWORD, cls.PG_DATABASE]
+        if not value("USE_SQLITE") and not value("DATABASE_URL") and not all(
+            [value("PG_HOST"), value("PG_USER"), value("PG_PASSWORD"), value("PG_DATABASE")]
         ):
             errors.append("DATABASE_URL or all PG_HOST/PG_USER/PG_PASSWORD/PG_DATABASE values are required")
-        if cls.ENV == "production" and cls.USE_SQLITE:
+        if environment == "production" and value("USE_SQLITE"):
             errors.append("USE_SQLITE=false is required in production")
-        if cls.ENV == "production" and cls.RECAPTCHA_DISABLED:
+        if environment == "production" and value("RECAPTCHA_DISABLED"):
             errors.append("RECAPTCHA_DISABLED=false is required in production")
-        if cls.ENV == "production" and not cls.RECAPTCHA_SECRET_KEY:
+        if environment == "production" and not value("RECAPTCHA_SECRET_KEY"):
             errors.append("RECAPTCHA_SECRET_KEY is required in production")
-        if cls.ENV == "production" and cls.SKIP_EMAIL_VERIFICATION:
+        if environment == "production" and value("SKIP_EMAIL_VERIFICATION"):
             errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
-        if cls.ENV == "production" and not cls.RESEND_API_KEY:
+        if environment == "production" and not value("RESEND_API_KEY"):
             errors.append("RESEND_API_KEY is required in production")
-        if cls.ENV == "production" and not cls.EMAIL_FROM:
+        if environment == "production" and not value("EMAIL_FROM"):
             errors.append("EMAIL_FROM is required in production")
         if errors:
             raise RuntimeError("Invalid application configuration: " + "; ".join(errors))

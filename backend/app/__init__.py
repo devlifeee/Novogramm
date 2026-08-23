@@ -14,7 +14,9 @@ def create_app(config_overrides=None):
     app.config.from_object(Config)
     if config_overrides:
         app.config.update(config_overrides)
-    Config.validate()
+    Config.validate(app.config)
+    if app.config["ENV"] == "production":
+        app.logger.info("Email transport: resend")
 
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=False)
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1, x_proto=1)

@@ -8,6 +8,10 @@ RESEND_EMAILS_URL = "https://api.resend.com/emails"
 EMAIL_TIMEOUT_SECONDS = 10
 
 
+class EmailConfigurationError(RuntimeError):
+    """Raised when the required production email transport is not configured."""
+
+
 def is_valid_email(email):
     pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return re.match(pattern, email) is not None
@@ -17,6 +21,10 @@ def send_email(recipient, subject, html):
     api_key = current_app.config["RESEND_API_KEY"]
     sender = current_app.config["EMAIL_FROM"]
     if not api_key or not sender:
+        if current_app.config["ENV"] == "production":
+            raise EmailConfigurationError(
+                "Invalid email configuration: RESEND_API_KEY and EMAIL_FROM are required in production"
+            )
         current_app.logger.error("Resend email delivery is not configured")
         return False
 
