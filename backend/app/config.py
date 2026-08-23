@@ -53,7 +53,7 @@ class Config:
     RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "")
     RECAPTCHA_DISABLED = _bool("RECAPTCHA_DISABLED", ENV != "production")
     SKIP_EMAIL_VERIFICATION = _bool("SKIP_EMAIL_VERIFICATION", ENV != "production")
-    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
     EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "disabled").lower()
@@ -85,8 +85,8 @@ class Config:
             errors.append("RECAPTCHA_SECRET_KEY is required in production")
         if environment == "production" and value("SKIP_EMAIL_VERIFICATION"):
             errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
-        if environment == "production" and not value("RESEND_API_KEY"):
-            errors.append("RESEND_API_KEY is required in production")
+        if environment == "production" and not value("SENDGRID_API_KEY"):
+            errors.append("SENDGRID_API_KEY is required in production")
         if environment == "production" and not value("EMAIL_FROM"):
             errors.append("EMAIL_FROM is required in production")
         if errors:

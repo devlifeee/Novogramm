@@ -44,8 +44,8 @@ FRONTEND_URL=https://your-site-domain
 CORS_ORIGINS=https://your-site-domain
 RECAPTCHA_DISABLED=false
 RECAPTCHA_SECRET_KEY=...
-RESEND_API_KEY=re_...
-EMAIL_FROM=Novogramm <noreply@your-verified-domain.example>
+SENDGRID_API_KEY=SG_...
+EMAIL_FROM=your-single-sender-verified-address@example.com
 UPLOAD_DIR=/data/uploads
 ```
 

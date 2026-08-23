@@ -4,7 +4,7 @@ import requests
 from flask import current_app
 
 
-RESEND_EMAILS_URL = "https://api.resend.com/emails"
+SENDGRID_MAIL_SEND_URL = "https://api.sendgrid.com/v3/mail/send"
 EMAIL_TIMEOUT_SECONDS = 10
 
 
@@ -18,30 +18,35 @@ def is_valid_email(email):
 
 
 def send_email(recipient, subject, html):
-    api_key = current_app.config["RESEND_API_KEY"]
+    api_key = current_app.config["SENDGRID_API_KEY"]
     sender = current_app.config["EMAIL_FROM"]
     if not api_key or not sender:
         if current_app.config["ENV"] == "production":
             raise EmailConfigurationError(
-                "Invalid email configuration: RESEND_API_KEY and EMAIL_FROM are required in production"
+                "Invalid email configuration: SENDGRID_API_KEY and EMAIL_FROM are required in production"
             )
-        current_app.logger.error("Resend email delivery is not configured")
+        current_app.logger.error("SendGrid email delivery is not configured")
         return False
 
     try:
         response = requests.post(
-            RESEND_EMAILS_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"from": sender, "to": [recipient], "subject": subject, "html": html},
+            SENDGRID_MAIL_SEND_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "personalizations": [{"to": [{"email": recipient}]}],
+                "from": {"email": sender},
+                "subject": subject,
+                "content": [{"type": "text/html", "value": html}],
+            },
             timeout=EMAIL_TIMEOUT_SECONDS,
         )
     except requests.RequestException as error:
-        current_app.logger.warning("Resend email delivery request failed: %s", type(error).__name__)
+        current_app.logger.warning("SendGrid email delivery request failed: %s", type(error).__name__)
         return False
 
     if not response.ok:
         current_app.logger.warning(
-            "Resend email delivery rejected: status=%s response=%s",
+            "SendGrid email delivery rejected: status=%s response=%s",
             response.status_code,
             response.text[:300],
         )

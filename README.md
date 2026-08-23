@@ -49,7 +49,7 @@ npm --prefix frontend audit --omit=dev
 
 ## Production configuration
 
-Обязательны `APP_ENV=production`, сильный `SECRET_KEY`, `USE_SQLITE=false`, PostgreSQL credentials или `DATABASE_URL`, `PG_SSLMODE=require`, точный `CORS_ORIGINS`, включённая reCAPTCHA и Resend (`RESEND_API_KEY`, `EMAIL_FROM`). Секреты передаются secret manager платформы, не `.env` в image/repository.
+Обязательны `APP_ENV=production`, сильный `SECRET_KEY`, `USE_SQLITE=false`, PostgreSQL credentials или `DATABASE_URL`, `PG_SSLMODE=require`, точный `CORS_ORIGINS`, включённая reCAPTCHA и SendGrid (`SENDGRID_API_KEY`, `EMAIL_FROM`). `EMAIL_FROM` должен быть Single Sender verified address. Секреты передаются secret manager платформы, не `.env` в image/repository.
 
 Для Railway uploads создайте Volume на API service с mount path `/data/uploads` и задайте `UPLOAD_DIR=/data/uploads`. Railway volume принадлежит root; при non-root runtime задайте также `RAILWAY_RUN_UID=0`. Flask создаёт `avatars/` и `posts/` при старте и раздаёт их по прежним URL `/static/uploads/...`; Appwrite frontend направляет эти URL на `API_BASE_URL`. `UPLOAD_FOLDER` остаётся fallback для старых local deploys.
 

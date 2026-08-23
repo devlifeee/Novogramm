@@ -8,22 +8,22 @@ from app.auth import routes as auth_routes
 from app.config import Config
 
 
-class ResendResponse:
+class SendGridResponse:
     ok = True
     status_code = 200
     text = ""
 
 
-def test_resend_transport_uses_https_and_verified_sender(app, monkeypatch):
-    monkeypatch.setitem(app.config, "RESEND_API_KEY", "re_test_key")
-    monkeypatch.setitem(app.config, "EMAIL_FROM", "Novogramm <noreply@example.com>")
+def test_sendgrid_transport_uses_https_and_single_sender(app, monkeypatch):
+    monkeypatch.setitem(app.config, "SENDGRID_API_KEY", "SG.test_key")
+    monkeypatch.setitem(app.config, "EMAIL_FROM", "verified-sender@example.com")
     monkeypatch.setitem(app.config, "FRONTEND_URL", "https://novogramm.example")
     request = {}
 
     def post(url, **kwargs):
         request["url"] = url
         request.update(kwargs)
-        return ResendResponse()
+        return SendGridResponse()
 
     monkeypatch.setattr(email_utils.requests, "post", post)
 
@@ -31,15 +31,16 @@ def test_resend_transport_uses_https_and_verified_sender(app, monkeypatch):
         assert email_utils.send_verification_email("user@example.com", "12345")
         assert email_utils.send_password_reset_email("user@example.com", "reset-token")
 
-    assert request["url"] == "https://api.resend.com/emails"
-    assert request["headers"] == {"Authorization": "Bearer re_test_key"}
+    assert request["url"] == "https://api.sendgrid.com/v3/mail/send"
+    assert request["headers"] == {"Authorization": "Bearer SG.test_key", "Content-Type": "application/json"}
     assert request["timeout"] == 10
-    assert request["json"]["from"] == "Novogramm <noreply@example.com>"
-    assert request["json"]["to"] == ["user@example.com"]
-    assert "https://novogramm.example/auth/reset-password/reset-token" in request["json"]["html"]
+    assert request["json"]["from"] == {"email": "verified-sender@example.com"}
+    assert request["json"]["personalizations"] == [{"to": [{"email": "user@example.com"}]}]
+    assert request["json"]["content"][0]["type"] == "text/html"
+    assert "https://novogramm.example/auth/reset-password/reset-token" in request["json"]["content"][0]["value"]
 
 
-def test_production_configuration_requires_resend_credentials():
+def test_production_configuration_requires_sendgrid_credentials():
     settings = {
         "ENV": "production",
         "SECRET_KEY": "test-production-secret",
@@ -48,25 +49,25 @@ def test_production_configuration_requires_resend_credentials():
         "RECAPTCHA_DISABLED": False,
         "RECAPTCHA_SECRET_KEY": "test-recaptcha-secret",
         "SKIP_EMAIL_VERIFICATION": False,
-        "RESEND_API_KEY": "",
+        "SENDGRID_API_KEY": "",
         "EMAIL_FROM": "",
     }
 
-    with pytest.raises(RuntimeError, match="RESEND_API_KEY is required in production; EMAIL_FROM is required in production"):
+    with pytest.raises(RuntimeError, match="SENDGRID_API_KEY is required in production; EMAIL_FROM is required in production"):
         Config.validate(settings)
 
 
-def test_production_auth_email_paths_use_resend_without_smtplib(client, app, monkeypatch):
+def test_production_auth_email_paths_use_sendgrid_https_without_smtplib(client, app, monkeypatch):
     monkeypatch.setitem(app.config, "ENV", "production")
     monkeypatch.setitem(app.config, "SKIP_EMAIL_VERIFICATION", False)
-    monkeypatch.setitem(app.config, "RESEND_API_KEY", "re_test_key")
-    monkeypatch.setitem(app.config, "EMAIL_FROM", "Novogramm <noreply@example.com>")
+    monkeypatch.setitem(app.config, "SENDGRID_API_KEY", "SG.test_key")
+    monkeypatch.setitem(app.config, "EMAIL_FROM", "verified-sender@example.com")
     monkeypatch.setitem(app.config, "OTP_RESEND_SECONDS", 0)
     requests = []
 
     def post(url, **kwargs):
         requests.append((url, kwargs))
-        return ResendResponse()
+        return SendGridResponse()
 
     original_import = builtins.__import__
 
@@ -89,8 +90,8 @@ def test_production_auth_email_paths_use_resend_without_smtplib(client, app, mon
     assert client.post("/forgot-password", json={"email": email}).status_code == 200
 
     assert len(requests) == 3
-    assert all(url == email_utils.RESEND_EMAILS_URL for url, _kwargs in requests)
-    assert all(kwargs["headers"] == {"Authorization": "Bearer re_test_key"} for _url, kwargs in requests)
+    assert all(url == email_utils.SENDGRID_MAIL_SEND_URL for url, _kwargs in requests)
+    assert all(kwargs["headers"] == {"Authorization": "Bearer SG.test_key", "Content-Type": "application/json"} for _url, kwargs in requests)
 
 
 def test_unverified_registration_can_retry_delivery(client, app, monkeypatch):
