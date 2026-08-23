@@ -740,6 +740,50 @@ input {
   height: 40px;
 }
 
+.post-card__moderation-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.post-card__moderation-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 8;
+  min-width: 172px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 14px;
+  background: rgba(24, 35, 22, 0.98);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
+}
+
+.post-card__moderation-delete {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 10px;
+  color: #ff9f9f;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+}
+
+.post-card__moderation-delete:hover {
+  background: rgba(221, 68, 68, 0.18);
+}
+
+.post-card__moderation-delete:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .post-card__content {
   display: grid;
   gap: 14px;
@@ -1045,12 +1089,19 @@ input {
 }
 
 .home-profile-post {
+  position: relative;
   display: grid;
   gap: 12px;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 22px;
   background: rgba(20, 30, 18, 0.28);
+}
+
+.home-profile-post > .post-card__moderation-menu {
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 
 .home-profile-post p {
@@ -1066,7 +1117,7 @@ input {
   object-fit: cover;
 }
 
-.home-profile-post div {
+.home-profile-post > div:not(.post-card__moderation-menu) {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;

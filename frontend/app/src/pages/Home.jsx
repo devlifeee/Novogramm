@@ -55,6 +55,7 @@ const Home = () => {
   const [profilePosts, setProfilePosts] = useState([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
+  const [openModerationMenu, setOpenModerationMenu] = useState(null);
   const [error, setError] = useState('');
 
   const authToken = getAuthToken();
@@ -156,6 +157,27 @@ const Home = () => {
     };
   }, [searchQuery]);
 
+  useEffect(() => {
+    if (!openModerationMenu) return undefined;
+
+    const closeOnOutsideClick = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-moderation-menu]')) {
+        setOpenModerationMenu(null);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setOpenModerationMenu(null);
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openModerationMenu]);
+
   const handleImageSelect = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -245,11 +267,22 @@ const Home = () => {
         const { [postId]: _removed, ...remaining } = current;
         return remaining;
       });
+      setOpenModerationMenu(null);
     } catch (requestError) {
       setError(requestError.message || 'Не удалось удалить пост.');
     } finally {
       setModeratingPostId(null);
     }
+  };
+
+  const toggleModerationMenu = (menuId, event) => {
+    event.stopPropagation();
+    setOpenModerationMenu((current) => (current === menuId ? null : menuId));
+  };
+
+  const handleModerationDelete = (postId, event) => {
+    event.stopPropagation();
+    void handleModeratePost(postId);
   };
 
   const loadComments = async (postId) => {
@@ -584,6 +617,7 @@ const Home = () => {
                 const comments = commentsByPost[post.id] || [];
                 const commentsExpanded = expandedComments[post.id] || comments.length <= 5;
                 const visibleComments = commentsExpanded ? comments : comments.slice(0, 5);
+                const moderationMenuId = `feed-${post.id}`;
 
                 return (
                   <article className="post-card" key={post.id}>
@@ -603,9 +637,40 @@ const Home = () => {
                           <small>{formatPostTime(post.created_at)}</small>
                         </span>
                       </button>
-                      <button className="home-icon-button post-card__more" type="button" aria-label="Действия">
-                        <i className="fas fa-ellipsis-h" />
-                      </button>
+                      {user?.is_admin && (
+                        <div className="post-card__moderation-menu" data-moderation-menu>
+                          <button
+                            className="home-icon-button post-card__more"
+                            type="button"
+                            aria-label="Действия модерации"
+                            aria-haspopup="menu"
+                            aria-expanded={openModerationMenu === moderationMenuId}
+                            aria-controls={`moderation-menu-${moderationMenuId}`}
+                            onClick={(event) => toggleModerationMenu(moderationMenuId, event)}
+                          >
+                            <i className="fas fa-ellipsis-h" />
+                          </button>
+                          {openModerationMenu === moderationMenuId && (
+                            <div
+                              className="post-card__moderation-dropdown"
+                              id={`moderation-menu-${moderationMenuId}`}
+                              role="menu"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <button
+                                className="post-card__moderation-delete"
+                                type="button"
+                                role="menuitem"
+                                onClick={(event) => handleModerationDelete(post.id, event)}
+                                disabled={moderatingPostId === post.id}
+                              >
+                                <i className="far fa-trash-alt" />
+                                <span>{moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="post-card__content">
@@ -614,17 +679,6 @@ const Home = () => {
                     </div>
 
                     <div className="post-card__actions">
-                      {user?.is_admin && (
-                        <button
-                          className="post-card__action"
-                          type="button"
-                          onClick={() => handleModeratePost(post.id)}
-                          disabled={moderatingPostId === post.id}
-                        >
-                          <i className="far fa-trash-alt" />
-                          <span>{moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}</span>
-                        </button>
-                      )}
                       <button
                         className={`post-card__action ${post.is_liked ? 'is-liked' : ''}`}
                         type="button"
@@ -769,25 +823,50 @@ const Home = () => {
                   ) : (
                     profilePosts.map((post) => {
                       const imageSrc = postImageSrc(post);
+                      const moderationMenuId = `profile-${post.id}`;
 
                       return (
                         <article className="home-profile-post" key={post.id}>
+                          {user?.is_admin && (
+                            <div className="post-card__moderation-menu" data-moderation-menu>
+                              <button
+                                className="home-icon-button post-card__more"
+                                type="button"
+                                aria-label="Действия модерации"
+                                aria-haspopup="menu"
+                                aria-expanded={openModerationMenu === moderationMenuId}
+                                aria-controls={`moderation-menu-${moderationMenuId}`}
+                                onClick={(event) => toggleModerationMenu(moderationMenuId, event)}
+                              >
+                                <i className="fas fa-ellipsis-h" />
+                              </button>
+                              {openModerationMenu === moderationMenuId && (
+                                <div
+                                  className="post-card__moderation-dropdown"
+                                  id={`moderation-menu-${moderationMenuId}`}
+                                  role="menu"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <button
+                                    className="post-card__moderation-delete"
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(event) => handleModerationDelete(post.id, event)}
+                                    disabled={moderatingPostId === post.id}
+                                  >
+                                    <i className="far fa-trash-alt" />
+                                    <span>{moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
                           <p>{post.content}</p>
                           {imageSrc && <img src={imageSrc} alt="Изображение поста" />}
                           <div>
                             <span><i className="far fa-heart" /> {post.likes_count || 0}</span>
                             <span><i className="far fa-comment" /> {post.comments_count || 0}</span>
                             <time>{formatPostTime(post.created_at)}</time>
-                            {user?.is_admin && (
-                              <button
-                                className="post-card__action"
-                                type="button"
-                                onClick={() => handleModeratePost(post.id)}
-                                disabled={moderatingPostId === post.id}
-                              >
-                                {moderatingPostId === post.id ? 'Удаляем...' : 'Удалить пост'}
-                              </button>
-                            )}
                           </div>
                         </article>
                       );
