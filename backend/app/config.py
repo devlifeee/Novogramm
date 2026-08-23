@@ -53,7 +53,9 @@ class Config:
     RECAPTCHA_SECRET_KEY = os.getenv("RECAPTCHA_SECRET_KEY", "")
     RECAPTCHA_DISABLED = _bool("RECAPTCHA_DISABLED", ENV != "production")
     SKIP_EMAIL_VERIFICATION = _bool("SKIP_EMAIL_VERIFICATION", ENV != "production")
-    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+    GMAIL_CLIENT_ID = os.getenv("GMAIL_CLIENT_ID", "")
+    GMAIL_CLIENT_SECRET = os.getenv("GMAIL_CLIENT_SECRET", "")
+    GMAIL_REFRESH_TOKEN = os.getenv("GMAIL_REFRESH_TOKEN", "")
     EMAIL_FROM = os.getenv("EMAIL_FROM", "")
 
     SMS_PROVIDER = os.getenv("SMS_PROVIDER", "disabled").lower()
@@ -85,8 +87,12 @@ class Config:
             errors.append("RECAPTCHA_SECRET_KEY is required in production")
         if environment == "production" and value("SKIP_EMAIL_VERIFICATION"):
             errors.append("SKIP_EMAIL_VERIFICATION=false is required in production")
-        if environment == "production" and not value("SENDGRID_API_KEY"):
-            errors.append("SENDGRID_API_KEY is required in production")
+        if environment == "production" and not value("GMAIL_CLIENT_ID"):
+            errors.append("GMAIL_CLIENT_ID is required in production")
+        if environment == "production" and not value("GMAIL_CLIENT_SECRET"):
+            errors.append("GMAIL_CLIENT_SECRET is required in production")
+        if environment == "production" and not value("GMAIL_REFRESH_TOKEN"):
+            errors.append("GMAIL_REFRESH_TOKEN is required in production")
         if environment == "production" and not value("EMAIL_FROM"):
             errors.append("EMAIL_FROM is required in production")
         if errors:

@@ -27,7 +27,7 @@ def create_app(config_overrides=None):
         app.config.update(config_overrides)
     Config.validate(app.config)
     if app.config["ENV"] == "production":
-        app.logger.info("Email transport: sendgrid")
+        app.logger.info("Email transport: gmail-api")
     initialize_upload_directories(app)
 
     CORS(app, origins=app.config["CORS_ORIGINS"], supports_credentials=False)

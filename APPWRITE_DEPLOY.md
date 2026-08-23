@@ -44,13 +44,29 @@ FRONTEND_URL=https://your-site-domain
 CORS_ORIGINS=https://your-site-domain
 RECAPTCHA_DISABLED=false
 RECAPTCHA_SECRET_KEY=...
-SENDGRID_API_KEY=SG_...
-EMAIL_FROM=your-single-sender-verified-address@example.com
+GMAIL_CLIENT_ID=...
+GMAIL_CLIENT_SECRET=...
+GMAIL_REFRESH_TOKEN=...
+EMAIL_FROM=novogramm.corporation@gmail.com
 UPLOAD_DIR=/data/uploads
 ```
 
 Generate `SECRET_KEY` and `TOKEN_HASH_KEY` independently with at least 32 random
 bytes. Never commit these values.
+
+For Gmail API authorization, run this locally (never on Railway) after downloading
+the **Desktop** OAuth client JSON:
+
+```bash
+python scripts/gmail_oauth_refresh_token.py /path/to/client_secret_....json
+```
+
+The helper opens a browser, requests only `https://www.googleapis.com/auth/gmail.send`,
+and prints a refresh token for manual insertion as `GMAIL_REFRESH_TOKEN`. Set the
+Google OAuth consent screen publishing status to **In production** before obtaining
+the Railway token. Testing status refresh tokens expire after seven days for this
+sensitive scope. Do not upload the client JSON or any token to Appwrite or Railway
+source control.
 
 ## Required order
 

@@ -17,6 +17,9 @@ dist/
 *.pem
 *.key
 credentials*.json
+client_secret*.json
+token.json
+gmail_refresh_token*.txt
 *.nc
 *.grib
 *.grib2
