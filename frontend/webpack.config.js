@@ -4,8 +4,11 @@ const webpack = require('webpack');
 
 const apiTarget = process.env.FRONTEND_API_TARGET || 'http://localhost:3000';
 
-module.exports = {
-  mode: 'development',
+module.exports = (env, argv) => {
+  const mode = argv.mode || 'development';
+
+  return {
+    mode,
   entry: './app/static/js/index.js',
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -20,7 +23,9 @@ module.exports = {
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-react']
+            presets: [['@babel/preset-react', {
+              development: mode === 'development'
+            }]]
           }
         }
       },
@@ -102,8 +107,9 @@ module.exports = {
       }
     ],
   },
-  devtool: 'eval-source-map',
+  devtool: mode === 'production' ? false : 'eval-source-map',
   resolve: {
     extensions: ['.js', '.jsx'],
-  }
+  },
+  };
 };
