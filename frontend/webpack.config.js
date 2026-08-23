@@ -49,7 +49,7 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      __API_BASE_URL__: JSON.stringify(process.env.APPWRITE_API_BASE_URL || ''),
+      __API_BASE_URL__: JSON.stringify(process.env.API_BASE_URL || ''),
     }),
     new HtmlWebpackPlugin({
       template: './app/static/index.html',

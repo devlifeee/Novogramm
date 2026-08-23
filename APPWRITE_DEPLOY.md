@@ -19,7 +19,7 @@ Create an Appwrite Site connected to this repository with these settings:
 Add this build variable to the Site:
 
 ```text
-APPWRITE_API_BASE_URL=https://your-api-domain.example
+API_BASE_URL=https://your-api-domain.example
 ```
 
 Do not add backend secrets to Site build variables. Values embedded in a frontend
@@ -52,7 +52,7 @@ bytes. Never commit these values.
 
 1. Provision external PostgreSQL and allow encrypted connections.
 2. Deploy the API and verify `/health/ready`.
-3. Create the Appwrite Site with `APPWRITE_API_BASE_URL` pointing to the API.
+3. Create the Appwrite Site with `API_BASE_URL` pointing to the API.
 4. Set the final Site domain in backend `FRONTEND_URL` and `CORS_ORIGINS`.
 5. Rebuild the Site and test registration, login, uploads, posts, and chats.
 
