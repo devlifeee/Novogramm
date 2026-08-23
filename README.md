@@ -75,3 +75,4 @@ pg_restore --clean --if-exists --no-owner --dbname="$RESTORE_DATABASE_URL" novog
 ## Примечание по существующему Docker volume
 
 Если volume был создан старой конфигурацией с другими PostgreSQL credentials, не удаляйте его вслепую. Сначала сделайте `pg_dump`, создайте новый volume с текущими credentials и восстановите дамп.
+# railway deploy trigger
