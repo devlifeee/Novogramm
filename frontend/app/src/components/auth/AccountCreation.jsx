@@ -24,7 +24,8 @@ const AccountCreation = () => {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const nextValue = name === 'username' ? value.toLowerCase() : value;
+    setFormData((prev) => ({ ...prev, [name]: nextValue }));
   };
 
   const handleSubmit = async (event) => {
@@ -133,6 +134,10 @@ const AccountCreation = () => {
                 onChange={handleChange}
                 className="register-form__input"
                 placeholder="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                autoComplete="username"
+                spellCheck={false}
                 required
                 maxLength="10"
                 minLength="3"
