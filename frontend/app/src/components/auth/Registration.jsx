@@ -278,7 +278,7 @@ const Register = () => {
             <label className="register-form__checkbox-label" htmlFor="agree">
               Нажимая зарегистрироваться, я соглашаюсь с{' '}
               <Link to="/auth/privacy-policy" target="_blank" className="register-form__policy-link">
-                условиями использования и политикой конфиденциальности
+                Пользовательским соглашением
               </Link>
             </label>
           </div>
