@@ -37,7 +37,7 @@ const avatarSrc = (avatar) => mediaUrl(avatar || DEFAULT_AVATAR);
 const UserAvatar = ({ src, alt, className, hasClownHat = false }) => (
   <span className="user-avatar">
     <img className={className} src={src} alt={alt} />
-    {hasClownHat && <span className="user-avatar__clown-hat" role="img" aria-label="Клоунская шляпа">🤡</span>}
+    {hasClownHat && <span className="user-avatar__clown-hat" role="img" aria-label="Метка">💩</span>}
   </span>
 );
 
@@ -449,8 +449,8 @@ const Home = () => {
 
     const hasClownHat = Boolean(profileUser.has_clown_hat);
     const confirmation = hasClownHat
-      ? 'Снять клоунскую шляпу с этого пользователя?'
-      : 'Выдать этому пользователю клоунскую шляпу?';
+      ? 'Снять метку с этого пользователя?'
+      : 'Унизить этого пользователя?';
     if (!window.confirm(confirmation)) return;
 
     setUpdatingClownHat(true);
@@ -461,7 +461,7 @@ const Home = () => {
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Не удалось изменить клоунскую шляпу');
+        throw new Error(data.error || 'Не удалось изменить метку');
       }
 
       setProfileUser((current) => (current ? { ...current, has_clown_hat: data.has_clown_hat } : current));
@@ -478,7 +478,7 @@ const Home = () => {
         ))
       ])));
     } catch (requestError) {
-      setError(requestError.message || 'Не удалось изменить клоунскую шляпу.');
+      setError(requestError.message || 'Не удалось изменить метку.');
     } finally {
       setUpdatingClownHat(false);
     }
@@ -973,7 +973,7 @@ const Home = () => {
                         onClick={handleClownHat}
                         disabled={updatingClownHat}
                       >
-                        {updatingClownHat ? 'Обновляем...' : profileUser.has_clown_hat ? 'Снять клоунскую шляпу' : 'Выдать клоунскую шляпу'}
+                        {updatingClownHat ? 'Обновляем...' : profileUser.has_clown_hat ? 'Снять метку' : 'Унизить'}
                       </button>
                     )}
                   </div>

@@ -662,9 +662,9 @@ input {
 .user-avatar__clown-hat {
   position: absolute;
   z-index: 1;
-  top: -0.55em;
+  top: -1.05em;
   left: 50%;
-  font-size: 1.05em;
+  font-size: 2em;
   line-height: 1;
   pointer-events: none;
   transform: translateX(-50%);
