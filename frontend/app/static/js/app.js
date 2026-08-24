@@ -14,7 +14,6 @@ import PrivacyPolicy from '../../src/components/auth/PrivacyPolicy.jsx';
 import ResetPassword from '../../src/components/auth/ResetPassword.jsx';
 import Home from '../../src/pages/Home.jsx';
 import Settings from '../../src/pages/Settings.jsx';
-import Chats from '../../src/pages/Chats.jsx';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('authToken');
@@ -42,14 +41,6 @@ const App = () => {
             element={
               <PrivateRoute>
                 <Home />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/chats"
-            element={
-              <PrivateRoute>
-                <Chats />
               </PrivateRoute>
             }
           />
