@@ -235,14 +235,6 @@ const Settings = () => {
               <i className="fas fa-home" />
               <span>Главная</span>
             </Link>
-            <Link to="/chats" className="home-nav__item">
-              <i className="fas fa-comment-dots" />
-              <span>Чаты</span>
-            </Link>
-            <Link to="/programing_mode" className="home-nav__item">
-              <i className="fas fa-laptop-code" />
-              <span>Programming mode</span>
-            </Link>
             <Link to="/settings" className="home-nav__item active">
               <i className="fas fa-cog" />
               <span>Настройки</span>

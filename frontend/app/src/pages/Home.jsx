@@ -418,7 +418,6 @@ const Home = () => {
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Не удалось открыть диалог');
-      navigate('/chats', { state: { conversationId: data.conversation_id } });
     } catch (requestError) {
       setError(typeof requestError.message === 'string' ? requestError.message : 'Не удалось открыть диалог');
     }
@@ -503,14 +502,6 @@ const Home = () => {
               <i className="fas fa-home" />
               <span>Главная</span>
             </Link>
-            <Link to="/chats" className="home-nav__item">
-              <i className="fas fa-comment-dots" />
-              <span>Чаты</span>
-            </Link>
-            <Link to="/programing_mode" className="home-nav__item">
-              <i className="fas fa-laptop-code" />
-              <span>Programming mode</span>
-            </Link>
             <Link to="/settings" className="home-nav__item">
               <i className="fas fa-cog" />
               <span>Настройки</span>
@@ -582,8 +573,6 @@ const Home = () => {
               </button>
             </div>
           </form>
-
-          {error && <div className="home-message home-message--error">{error}</div>}
 
           <section className="posts-feed" id="posts-feed">
             <div className="posts-feed__header">
@@ -879,20 +868,6 @@ const Home = () => {
         </div>
       )}
 
-      <nav className="home-mobile-nav" aria-label="Мобильная навигация">
-        <Link to="/home" className="active">
-          <i className="fas fa-home" />
-          <span>Главная</span>
-        </Link>
-        <Link to="/chats">
-          <i className="fas fa-comment-dots" />
-          <span>Чаты</span>
-        </Link>
-        <Link to="/settings">
-          <i className="fas fa-cog" />
-          <span>Профиль</span>
-        </Link>
-      </nav>
     </div>
   );
 };
