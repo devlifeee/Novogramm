@@ -34,6 +34,13 @@ const postImageSrc = (post) => {
 
 const avatarSrc = (avatar) => mediaUrl(avatar || DEFAULT_AVATAR);
 
+const UserAvatar = ({ src, alt, className, hasClownHat = false }) => (
+  <span className="user-avatar">
+    <img className={className} src={src} alt={alt} />
+    {hasClownHat && <span className="user-avatar__clown-hat" role="img" aria-label="Клоунская шляпа">🤡</span>}
+  </span>
+);
+
 const Home = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -56,6 +63,8 @@ const Home = () => {
   const [profileLoading, setProfileLoading] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
   const [moderatingCommentId, setModeratingCommentId] = useState(null);
+  const [banningUser, setBanningUser] = useState(false);
+  const [updatingClownHat, setUpdatingClownHat] = useState(false);
   const [openModerationMenu, setOpenModerationMenu] = useState(null);
   const [error, setError] = useState('');
 
@@ -405,6 +414,76 @@ const Home = () => {
     }
   };
 
+  const handleUserBan = async () => {
+    if (!profileUser) return;
+
+    const isBanned = Boolean(profileUser.is_banned);
+    const confirmation = isBanned
+      ? 'Разблокировать этого пользователя?'
+      : 'Заблокировать этого пользователя? Он сразу потеряет доступ к аккаунту.';
+    if (!window.confirm(confirmation)) return;
+
+    setBanningUser(true);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/users/${profileUser.id}/ban`, {
+        method: isBanned ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: isBanned ? undefined : JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не удалось изменить блокировку пользователя');
+      }
+
+      setProfileUser((current) => (current ? { ...current, is_banned: data.is_banned } : current));
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось изменить блокировку пользователя.');
+    } finally {
+      setBanningUser(false);
+    }
+  };
+
+  const handleClownHat = async () => {
+    if (!profileUser) return;
+
+    const hasClownHat = Boolean(profileUser.has_clown_hat);
+    const confirmation = hasClownHat
+      ? 'Снять клоунскую шляпу с этого пользователя?'
+      : 'Выдать этому пользователю клоунскую шляпу?';
+    if (!window.confirm(confirmation)) return;
+
+    setUpdatingClownHat(true);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/users/${profileUser.id}/clown-hat`, {
+        method: hasClownHat ? 'DELETE' : 'POST'
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не удалось изменить клоунскую шляпу');
+      }
+
+      setProfileUser((current) => (current ? { ...current, has_clown_hat: data.has_clown_hat } : current));
+      setSearchResults((current) => current.map((person) => (
+        person.id === profileUser.id ? { ...person, has_clown_hat: data.has_clown_hat } : person
+      )));
+      setPosts((current) => current.map((post) => (
+        post.user_id === profileUser.id ? { ...post, user_has_clown_hat: data.has_clown_hat } : post
+      )));
+      setCommentsByPost((current) => Object.fromEntries(Object.entries(current).map(([postId, comments]) => [
+        postId,
+        comments.map((comment) => (
+          comment.user_id === profileUser.id ? { ...comment, user_has_clown_hat: data.has_clown_hat } : comment
+        ))
+      ])));
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось изменить клоунскую шляпу.');
+    } finally {
+      setUpdatingClownHat(false);
+    }
+  };
+
   const openUserProfile = async (targetUserId) => {
     setProfileLoading(true);
     setShowSearch(false);
@@ -503,8 +582,8 @@ const Home = () => {
                       type="button"
                       onClick={() => openUserProfile(person.id)}
                     >
-                      <img src={avatarSrc(person.avatar)} alt="Аватар" />
-                      <span>
+                      <UserAvatar src={avatarSrc(person.avatar)} alt="Аватар" hasClownHat={person.has_clown_hat} />
+                      <span className="home-search__person-content">
                         <strong>{person.name}</strong>
                         <small>@{person.username}</small>
                       </span>
@@ -524,8 +603,8 @@ const Home = () => {
 
         <div className="home-header__actions">
           <button className="home-profile-chip" type="button" onClick={() => navigate('/settings')}>
-            <img src={currentAvatar} alt="Аватар" />
-            <span>{user?.name || 'Профиль'}</span>
+            <UserAvatar src={currentAvatar} alt="Аватар" hasClownHat={user?.has_clown_hat} />
+            <span className="home-profile-chip__name">{user?.name || 'Профиль'}</span>
           </button>
         </div>
       </header>
@@ -544,7 +623,7 @@ const Home = () => {
           </nav>
 
           <button className="home-user-card" type="button" onClick={() => navigate('/settings')}>
-            <img className="home-user-card__avatar" src={currentAvatar} alt="Аватар" />
+            <UserAvatar className="home-user-card__avatar" src={currentAvatar} alt="Аватар" hasClownHat={user?.has_clown_hat} />
             <span className="home-user-card__content">
               <strong>{user?.name || 'Профиль'}</strong>
               <small>@{user?.username || 'username'}</small>
@@ -566,7 +645,7 @@ const Home = () => {
 
           <form className="create-post" onSubmit={handleCreatePost}>
             <div className="create-post__top">
-              <img className="home-avatar" src={currentAvatar} alt="Аватар" />
+              <UserAvatar className="home-avatar" src={currentAvatar} alt="Аватар" hasClownHat={user?.has_clown_hat} />
               <textarea
                 className="create-post__input"
                 placeholder="Что у вас нового?"
@@ -651,10 +730,11 @@ const Home = () => {
                         type="button"
                         onClick={() => openUserProfile(post.user_id)}
                       >
-                        <img
+                        <UserAvatar
                           className="home-avatar"
                           src={avatarSrc(post.user_avatar)}
                           alt="Аватар"
+                          hasClownHat={post.user_has_clown_hat}
                         />
                         <span className="post-card__author">
                           <strong>{post.user_name || 'Пользователь'}</strong>
@@ -761,10 +841,11 @@ const Home = () => {
                               <div className="comment-card" key={comment.id}>
                                 <div className="comment-card__header">
                                   <div className="comment-card__user">
-                                    <img
+                                    <UserAvatar
                                       className="comment-card__avatar"
                                       src={avatarSrc(comment.user_avatar || post.user_avatar)}
                                       alt="Аватар"
+                                      hasClownHat={comment.user_has_clown_hat}
                                     />
                                     <div>
                                       <strong>{comment.user_name || 'Пользователь'}</strong>
@@ -855,7 +936,7 @@ const Home = () => {
             ) : (
               <>
                 <div className="home-profile-modal__header">
-                  <img src={avatarSrc(profileUser.avatar)} alt="Аватар" />
+                  <UserAvatar src={avatarSrc(profileUser.avatar)} alt="Аватар" hasClownHat={profileUser.has_clown_hat} />
                   <div>
                     <h2>{profileUser.name || 'Пользователь'}</h2>
                     <p>@{profileUser.username || 'username'}</p>
@@ -875,6 +956,26 @@ const Home = () => {
                       {profileUser.is_following ? 'Вы подписаны' : 'Подписаться'}
                     </button>
                     <button className="home-button home-button--ghost" type="button" onClick={() => startConversation(profileUser.id)}>Написать</button>
+                    {user?.is_admin && !profileUser.is_admin && (
+                      <button
+                        className="home-button home-button--danger"
+                        type="button"
+                        onClick={handleUserBan}
+                        disabled={banningUser}
+                      >
+                        {banningUser ? 'Обновляем...' : profileUser.is_banned ? 'Разбанить пользователя' : 'Заблокировать пользователя'}
+                      </button>
+                    )}
+                    {user?.is_admin && !profileUser.is_admin && (
+                      <button
+                        className="home-button home-button--ghost"
+                        type="button"
+                        onClick={handleClownHat}
+                        disabled={updatingClownHat}
+                      >
+                        {updatingClownHat ? 'Обновляем...' : profileUser.has_clown_hat ? 'Снять клоунскую шляпу' : 'Выдать клоунскую шляпу'}
+                      </button>
+                    )}
                   </div>
                 )}
 
