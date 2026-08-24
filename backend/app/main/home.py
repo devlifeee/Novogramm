@@ -132,7 +132,7 @@ POST_SELECT = """
 SELECT p.id,p.user_id,p.content,p.image_path,p.created_at,p.updated_at,
  u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar,
  (SELECT COUNT(*) FROM post_likes l WHERE l.post_id=p.id) AS likes_count,
- (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id) AS comments_count,
+ (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comments_count,
  EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id=p.id AND l.user_id=%s) AS is_liked
 FROM posts p JOIN email_auth u ON u.id=p.user_id
 WHERE p.deleted_at IS NULL
@@ -147,6 +147,7 @@ def serialize_post(row):
 @main.post("/api/posts")
 @auth_required
 @rate_limit("create_post", 30, 3600, subject=lambda: str(g.current_user["id"]))
+@rate_limit("create_post_cooldown", 1, lambda: current_app.config["POST_COOLDOWN_SECONDS"], subject=lambda: str(g.current_user["id"]))
 def create_post():
     content = str(request.form.get("content") if request.files or request.form else (request.get_json(silent=True) or {}).get("content", "")).strip()
     if not 1 <= len(content) <= current_app.config["MAX_POST_LENGTH"]:
@@ -283,7 +284,7 @@ def comments(post_id):
         limit, offset = pagination(50, 100)
     except ValueError as exc:
         return error(str(exc))
-    rows = execute_query("SELECT c.id,c.user_id,c.content,c.created_at,c.updated_at,u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar FROM comments c JOIN email_auth u ON u.id=c.user_id WHERE c.post_id=%s ORDER BY c.created_at,c.id LIMIT %s OFFSET %s", (post_id, limit, offset), fetchall=True)
+    rows = execute_query("SELECT c.id,c.user_id,c.content,c.created_at,c.updated_at,u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar FROM comments c JOIN email_auth u ON u.id=c.user_id WHERE c.post_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id LIMIT %s OFFSET %s", (post_id, limit, offset), fetchall=True)
     return jsonify([{**row, "created_at": serialize_time(row), "updated_at": serialize_time(row, "updated_at"), "user_avatar": row.get("user_avatar") or "/static/images/default-avatar.png"} for row in rows])
 
 
@@ -293,15 +294,47 @@ def edit_comment(comment_id):
     content = str((request.get_json(silent=True) or {}).get("content", "")).strip()
     if not 1 <= len(content) <= current_app.config["MAX_COMMENT_LENGTH"]:
         return error("Некорректный комментарий")
-    result = execute_query("UPDATE comments SET content=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND user_id=%s RETURNING id", (content, comment_id, g.current_user["id"]), fetch=True)
+    result = execute_query("UPDATE comments SET content=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s AND user_id=%s AND deleted_at IS NULL RETURNING id", (content, comment_id, g.current_user["id"]), fetch=True)
     return jsonify({"success": True}) if result else error("Комментарий не найден или недоступен", 404, "not_found")
 
 
 @main.delete("/api/comments/<int:comment_id>")
 @auth_required
 def delete_comment(comment_id):
-    result = execute_query("DELETE FROM comments WHERE id=%s AND user_id=%s RETURNING id", (comment_id, g.current_user["id"]), fetch=True)
+    result = execute_query("DELETE FROM comments WHERE id=%s AND user_id=%s AND deleted_at IS NULL RETURNING id", (comment_id, g.current_user["id"]), fetch=True)
     return jsonify({"success": True}) if result else error("Комментарий не найден или недоступен", 404, "not_found")
+
+
+@main.delete("/api/comments/<int:comment_id>/moderate")
+@admin_required
+def moderate_comment(comment_id):
+    data = request.get_json(silent=True) or {}
+    reason = data.get("reason")
+    if reason is not None:
+        reason = str(reason).strip()
+        if not reason:
+            reason = None
+        elif reason not in MODERATION_REASONS:
+            return error("Недопустимая причина модерации")
+
+    with transaction() as cursor:
+        cursor.execute(
+            _query("SELECT c.id,c.user_id,c.post_id FROM comments c JOIN posts p ON p.id=c.post_id WHERE c.id=%s AND c.deleted_at IS NULL AND p.deleted_at IS NULL"),
+            (comment_id,),
+        )
+        comment = cursor.fetchone()
+        if not comment:
+            return error("Комментарий не найден", 404, "not_found")
+        comment = dict(comment)
+        cursor.execute(
+            _query("UPDATE comments SET deleted_at=CURRENT_TIMESTAMP,moderated_by=%s,moderation_reason=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s"),
+            (g.current_user["id"], reason, comment_id),
+        )
+        cursor.execute(
+            _query("INSERT INTO comment_moderation_audit(moderator_user_id,comment_id,comment_author_id,post_id,reason) VALUES(%s,%s,%s,%s,%s)"),
+            (g.current_user["id"], comment_id, comment["user_id"], comment["post_id"], reason),
+        )
+    return jsonify({"success": True})
 
 
 @main.post("/api/follow/<int:user_id>")

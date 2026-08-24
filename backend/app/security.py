@@ -108,7 +108,8 @@ def rate_limit(scope: str, limit: int, window: int, subject=None):
             if current_app.config.get("TESTING"):
                 return view(*args, **kwargs)
             identity = subject() if subject else request.remote_addr or "unknown"
-            if not limiter.allowed(f"{scope}:{identity}", limit, window):
+            active_window = window() if callable(window) else window
+            if not limiter.allowed(f"{scope}:{identity}", limit, active_window):
                 return jsonify({"success": False, "error": {"code": "rate_limited", "message": "Слишком много запросов"}}), 429
             return view(*args, **kwargs)
         return wrapped

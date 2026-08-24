@@ -55,6 +55,7 @@ const Home = () => {
   const [profilePosts, setProfilePosts] = useState([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
+  const [moderatingCommentId, setModeratingCommentId] = useState(null);
   const [openModerationMenu, setOpenModerationMenu] = useState(null);
   const [error, setError] = useState('');
 
@@ -283,6 +284,40 @@ const Home = () => {
   const handleModerationDelete = (postId, event) => {
     event.stopPropagation();
     void handleModeratePost(postId);
+  };
+
+  const handleModerateComment = async (postId, commentId) => {
+    if (!window.confirm('Удалить этот комментарий за нарушение правил?')) return;
+
+    setModeratingCommentId(commentId);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/comments/${commentId}/moderate`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        const message = typeof data.error === 'string' ? data.error : data.error?.message;
+        throw new Error(message || 'Не удалось удалить комментарий');
+      }
+
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: (current[postId] || []).filter((comment) => comment.id !== commentId)
+      }));
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === postId ? { ...post, comments_count: Math.max(0, (post.comments_count || 0) - 1) } : post
+        )
+      );
+      setOpenModerationMenu(null);
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось удалить комментарий.');
+    } finally {
+      setModeratingCommentId(null);
+    }
   };
 
   const loadComments = async (postId) => {
@@ -719,7 +754,10 @@ const Home = () => {
                           <div className="post-card__no-comments">Пока нет комментариев.</div>
                         ) : (
                           <>
-                            {visibleComments.map((comment) => (
+                            {visibleComments.map((comment) => {
+                              const moderationMenuId = `comment-${post.id}-${comment.id}`;
+
+                              return (
                               <div className="comment-card" key={comment.id}>
                                 <div className="comment-card__header">
                                   <div className="comment-card__user">
@@ -733,11 +771,48 @@ const Home = () => {
                                       <span>@{comment.user_username || 'username'}</span>
                                     </div>
                                   </div>
-                                  <time>{formatPostTime(comment.created_at)}</time>
+                                  <div className="comment-card__actions">
+                                    <time>{formatPostTime(comment.created_at)}</time>
+                                    {user?.is_admin && (
+                                      <div className="post-card__moderation-menu" data-moderation-menu>
+                                        <button
+                                          className="home-icon-button comment-card__more"
+                                          type="button"
+                                          aria-label="Действия модерации комментария"
+                                          aria-haspopup="menu"
+                                          aria-expanded={openModerationMenu === moderationMenuId}
+                                          aria-controls={`moderation-menu-${moderationMenuId}`}
+                                          onClick={(event) => toggleModerationMenu(moderationMenuId, event)}
+                                        >
+                                          <i className="fas fa-ellipsis-h" />
+                                        </button>
+                                        {openModerationMenu === moderationMenuId && (
+                                          <div
+                                            className="post-card__moderation-dropdown"
+                                            id={`moderation-menu-${moderationMenuId}`}
+                                            role="menu"
+                                            onClick={(event) => event.stopPropagation()}
+                                          >
+                                            <button
+                                              className="post-card__moderation-delete"
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => void handleModerateComment(post.id, comment.id)}
+                                              disabled={moderatingCommentId === comment.id}
+                                            >
+                                              <i className="far fa-trash-alt" />
+                                              <span>{moderatingCommentId === comment.id ? 'Удаляем...' : 'Удалить комментарий'}</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                                 <p>{comment.content}</p>
                               </div>
-                            ))}
+                              );
+                            })}
 
                             {comments.length > 5 && (
                               <button

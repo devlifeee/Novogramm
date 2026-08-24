@@ -63,21 +63,23 @@ gunicorn run:app --bind 0.0.0.0:3000 --workers 2 --threads 4 --timeout 30
 
 Reverse proxy обязан завершать HTTPS, ограничивать request body не выше `MAX_REQUEST_BYTES`, проксировать `/api`, auth endpoints и `/static/uploads`, а frontend раздавать как статический production build. Не публикуйте PostgreSQL port наружу. При переходе с filesystem без volume URL в PostgreSQL менять не нужно: скопируйте `backend/app/static/uploads/{avatars,posts}` в Volume до отключения старого deployment.
 
-## Модерация постов
+## Модерация постов и комментариев
 
-Миграции автоматически добавляют `email_auth.is_admin`, soft-delete полей поста и
-таблицу аудита `post_moderation_audit`. Первого администратора назначайте только
+Миграции автоматически добавляют `email_auth.is_admin`, soft-delete полей постов и
+комментариев, а также таблицы аудита `post_moderation_audit` и
+`comment_moderation_audit`. Первого администратора назначайте только
 из защищённой PostgreSQL-консоли:
 
 ```sql
 UPDATE email_auth SET is_admin=TRUE WHERE email='admin@example.com';
 ```
 
-Администратор может вызвать `DELETE /api/posts/<post_id>/moderate` с необязательным
+Администратор может вызвать `DELETE /api/posts/<post_id>/moderate` или
+`DELETE /api/comments/<comment_id>/moderate` с необязательным
 JSON-полем `reason`: `prohibited_content`, `spam`, `harassment` или `other`.
-Операция скрывает пост из всех обычных reads, удаляет его локальный post image только
-из `UPLOAD_DIR/posts` и сохраняет audit record. Доступ к этому endpoint проверяется
-на сервере по `is_admin` текущей session, а не по данным frontend.
+Операция скрывает контент из всех обычных reads; при удалении поста также удаляет его
+локальное изображение из `UPLOAD_DIR/posts`, и сохраняет audit record. Доступ к этим
+endpoint проверяется на сервере по `is_admin` текущей session, а не по данным frontend.
 
 ## Backup и восстановление
 

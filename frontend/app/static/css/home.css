@@ -910,6 +910,18 @@ input {
   gap: 12px;
 }
 
+.comment-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-card__more {
+  width: 32px;
+  height: 32px;
+}
+
 .comment-card__user {
   min-width: 0;
   gap: 10px;
@@ -1376,4 +1388,3 @@ input {
     grid-template-columns: minmax(0, 1fr) 42px;
   }
 }
-

@@ -26,6 +26,35 @@ def test_normal_user_cannot_moderate_another_users_post(client, users):
     assert client.get(f"/api/posts/{post['id']}", headers=headers(owner)).status_code == 200
 
 
+def test_admin_moderation_hides_comment_and_writes_audit(client, users):
+    owner, admin = users
+    promote_to_admin(admin)
+    post = client.post("/api/posts", json={"content": "post"}, headers=headers(owner)).get_json()["post"]
+    comment = client.post(f"/api/posts/{post['id']}/comments", json={"content": "unsafe comment"}, headers=headers(owner)).get_json()
+
+    assert client.delete(f"/api/comments/{comment['id']}/moderate", headers=headers(owner)).status_code == 403
+    response = client.delete(
+        f"/api/comments/{comment['id']}/moderate",
+        json={"reason": "harassment"},
+        headers=headers(admin),
+    )
+    assert response.status_code == 200
+    assert client.get(f"/api/posts/{post['id']}/comments", headers=headers(owner)).get_json() == []
+    assert client.delete(f"/api/comments/{comment['id']}", headers=headers(owner)).status_code == 404
+    assert client.delete(f"/api/comments/{comment['id']}/moderate", headers=headers(admin)).status_code == 404
+
+    audit = execute_query(
+        "SELECT moderator_user_id,comment_id,comment_author_id,post_id,reason,created_at FROM comment_moderation_audit WHERE comment_id=%s",
+        (comment["id"],),
+        fetch=True,
+    )
+    assert audit["moderator_user_id"] == admin["id"]
+    assert audit["comment_author_id"] == owner["id"]
+    assert audit["post_id"] == post["id"]
+    assert audit["reason"] == "harassment"
+    assert audit["created_at"] is not None
+
+
 def test_admin_moderation_hides_post_removes_image_and_writes_audit(client, app, users, tmp_path, monkeypatch):
     from app import initialize_upload_directories
 
