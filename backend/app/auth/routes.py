@@ -183,6 +183,8 @@ def login():
     user = execute_query("SELECT * FROM email_auth WHERE email=%s", (email,), fetch=True)
     if not user or not bcrypt.checkpw(password.encode(), user["password"].encode()):
         return error("Неверный email или пароль", 401, "invalid_credentials")
+    if user.get("banned_at"):
+        return error("Аккаунт заблокирован", 403, "account_banned")
     if not user["verified"]:
         return error("Подтвердите email перед входом", 403, "email_unverified")
     raw, expires = issue_session(user["id"])
@@ -217,7 +219,7 @@ def forgot_password():
     email = str(data.get("email", "")).strip().lower()
     if not verify_recaptcha(data.get("g-recaptcha-response")):
         return error("Подтверждение reCAPTCHA не пройдено")
-    user = execute_query("SELECT id FROM email_auth WHERE email=%s", (email,), fetch=True)
+    user = execute_query("SELECT id FROM email_auth WHERE email=%s AND banned_at IS NULL", (email,), fetch=True)
     if user:
         raw = secrets.token_urlsafe(32)
         if send_password_reset_email(email, raw):
@@ -232,7 +234,7 @@ def reset_password():
     raw, password, confirmation = data.get("token", ""), data.get("new_password", ""), data.get("confirm_password", "")
     if password != confirmation or not strong_password(password):
         return error("Новый пароль не соответствует требованиям")
-    reset = execute_query("SELECT id,user_id FROM password_resets WHERE token_hash=%s AND consumed_at IS NULL AND expires_at>CURRENT_TIMESTAMP", (hash_secret(raw),), fetch=True)
+    reset = execute_query("SELECT pr.id,pr.user_id FROM password_resets pr JOIN email_auth u ON u.id=pr.user_id WHERE pr.token_hash=%s AND pr.consumed_at IS NULL AND pr.expires_at>CURRENT_TIMESTAMP AND u.banned_at IS NULL", (hash_secret(raw),), fetch=True)
     if not reset:
         return error("Ссылка недействительна или истекла", 400, "invalid_token")
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()

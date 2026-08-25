@@ -49,7 +49,7 @@ def current_user():
     return execute_query(
         """
         SELECT u.id, u.email, u.name, u.username, u.phone, u.phone_verified_at,
-               u.verified, u.is_admin, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
+               u.verified, u.is_admin, u.banned_at, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
         FROM sessions s JOIN email_auth u ON u.id=s.user_id
         WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP
         """,
@@ -63,6 +63,8 @@ def auth_required(view):
         user = current_user()
         if not user:
             return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Требуется авторизация"}}), 401
+        if user.get("banned_at"):
+            return jsonify({"success": False, "error": {"code": "account_banned", "message": "Аккаунт заблокирован"}}), 403
         g.current_user = user
         return view(*args, **kwargs)
     return wrapped
@@ -74,6 +76,8 @@ def admin_required(view):
         user = current_user()
         if not user:
             return jsonify({"success": False, "error": {"code": "unauthorized", "message": "Требуется авторизация"}}), 401
+        if user.get("banned_at"):
+            return jsonify({"success": False, "error": {"code": "account_banned", "message": "Аккаунт заблокирован"}}), 403
         if not user.get("is_admin"):
             return jsonify({"success": False, "error": {"code": "forbidden", "message": "Требуются права администратора"}}), 403
         g.current_user = user
@@ -108,7 +112,8 @@ def rate_limit(scope: str, limit: int, window: int, subject=None):
             if current_app.config.get("TESTING"):
                 return view(*args, **kwargs)
             identity = subject() if subject else request.remote_addr or "unknown"
-            if not limiter.allowed(f"{scope}:{identity}", limit, window):
+            active_window = window() if callable(window) else window
+            if not limiter.allowed(f"{scope}:{identity}", limit, active_window):
                 return jsonify({"success": False, "error": {"code": "rate_limited", "message": "Слишком много запросов"}}), 429
             return view(*args, **kwargs)
         return wrapped

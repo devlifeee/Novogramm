@@ -302,6 +302,10 @@ const Settings = () => {
                     value={form.username}
                     onChange={(event) => updateForm('username', event.target.value.toLowerCase())}
                     placeholder="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoComplete="username"
+                    spellCheck={false}
                     maxLength={10}
                   />
                 </label>

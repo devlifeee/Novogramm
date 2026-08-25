@@ -34,6 +34,12 @@ const postImageSrc = (post) => {
 
 const avatarSrc = (avatar) => mediaUrl(avatar || DEFAULT_AVATAR);
 
+const UserAvatar = ({ src, alt, className }) => (
+  <span className="user-avatar">
+    <img className={className} src={src} alt={alt} />
+  </span>
+);
+
 const Home = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -55,6 +61,8 @@ const Home = () => {
   const [profilePosts, setProfilePosts] = useState([]);
   const [profileLoading, setProfileLoading] = useState(false);
   const [moderatingPostId, setModeratingPostId] = useState(null);
+  const [moderatingCommentId, setModeratingCommentId] = useState(null);
+  const [banningUser, setBanningUser] = useState(false);
   const [openModerationMenu, setOpenModerationMenu] = useState(null);
   const [error, setError] = useState('');
 
@@ -285,6 +293,40 @@ const Home = () => {
     void handleModeratePost(postId);
   };
 
+  const handleModerateComment = async (postId, commentId) => {
+    if (!window.confirm('Удалить этот комментарий за нарушение правил?')) return;
+
+    setModeratingCommentId(commentId);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/comments/${commentId}/moderate`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        const message = typeof data.error === 'string' ? data.error : data.error?.message;
+        throw new Error(message || 'Не удалось удалить комментарий');
+      }
+
+      setCommentsByPost((current) => ({
+        ...current,
+        [postId]: (current[postId] || []).filter((comment) => comment.id !== commentId)
+      }));
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === postId ? { ...post, comments_count: Math.max(0, (post.comments_count || 0) - 1) } : post
+        )
+      );
+      setOpenModerationMenu(null);
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось удалить комментарий.');
+    } finally {
+      setModeratingCommentId(null);
+    }
+  };
+
   const loadComments = async (postId) => {
     const response = await authorizedFetch(`/api/get_comments/${postId}`);
     const data = await response.json();
@@ -367,6 +409,36 @@ const Home = () => {
       setProfileUser((current) => (current ? updateUser(current) : current));
     } catch (requestError) {
       setError(requestError.message || 'Не удалось обновить подписку.');
+    }
+  };
+
+  const handleUserBan = async () => {
+    if (!profileUser) return;
+
+    const isBanned = Boolean(profileUser.is_banned);
+    const confirmation = isBanned
+      ? 'Разблокировать этого пользователя?'
+      : 'Заблокировать этого пользователя? Он сразу потеряет доступ к аккаунту.';
+    if (!window.confirm(confirmation)) return;
+
+    setBanningUser(true);
+    setError('');
+    try {
+      const response = await authorizedFetch(`/api/users/${profileUser.id}/ban`, {
+        method: isBanned ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: isBanned ? undefined : JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не удалось изменить блокировку пользователя');
+      }
+
+      setProfileUser((current) => (current ? { ...current, is_banned: data.is_banned } : current));
+    } catch (requestError) {
+      setError(requestError.message || 'Не удалось изменить блокировку пользователя.');
+    } finally {
+      setBanningUser(false);
     }
   };
 
@@ -468,8 +540,8 @@ const Home = () => {
                       type="button"
                       onClick={() => openUserProfile(person.id)}
                     >
-                      <img src={avatarSrc(person.avatar)} alt="Аватар" />
-                      <span>
+                      <UserAvatar src={avatarSrc(person.avatar)} alt="Аватар" />
+                      <span className="home-search__person-content">
                         <strong>{person.name}</strong>
                         <small>@{person.username}</small>
                       </span>
@@ -489,8 +561,8 @@ const Home = () => {
 
         <div className="home-header__actions">
           <button className="home-profile-chip" type="button" onClick={() => navigate('/settings')}>
-            <img src={currentAvatar} alt="Аватар" />
-            <span>{user?.name || 'Профиль'}</span>
+            <UserAvatar src={currentAvatar} alt="Аватар" />
+            <span className="home-profile-chip__name">{user?.name || 'Профиль'}</span>
           </button>
         </div>
       </header>
@@ -509,7 +581,7 @@ const Home = () => {
           </nav>
 
           <button className="home-user-card" type="button" onClick={() => navigate('/settings')}>
-            <img className="home-user-card__avatar" src={currentAvatar} alt="Аватар" />
+            <UserAvatar className="home-user-card__avatar" src={currentAvatar} alt="Аватар" />
             <span className="home-user-card__content">
               <strong>{user?.name || 'Профиль'}</strong>
               <small>@{user?.username || 'username'}</small>
@@ -531,7 +603,7 @@ const Home = () => {
 
           <form className="create-post" onSubmit={handleCreatePost}>
             <div className="create-post__top">
-              <img className="home-avatar" src={currentAvatar} alt="Аватар" />
+              <UserAvatar className="home-avatar" src={currentAvatar} alt="Аватар" />
               <textarea
                 className="create-post__input"
                 placeholder="Что у вас нового?"
@@ -616,7 +688,7 @@ const Home = () => {
                         type="button"
                         onClick={() => openUserProfile(post.user_id)}
                       >
-                        <img
+                        <UserAvatar
                           className="home-avatar"
                           src={avatarSrc(post.user_avatar)}
                           alt="Аватар"
@@ -719,11 +791,14 @@ const Home = () => {
                           <div className="post-card__no-comments">Пока нет комментариев.</div>
                         ) : (
                           <>
-                            {visibleComments.map((comment) => (
+                            {visibleComments.map((comment) => {
+                              const moderationMenuId = `comment-${post.id}-${comment.id}`;
+
+                              return (
                               <div className="comment-card" key={comment.id}>
                                 <div className="comment-card__header">
                                   <div className="comment-card__user">
-                                    <img
+                                    <UserAvatar
                                       className="comment-card__avatar"
                                       src={avatarSrc(comment.user_avatar || post.user_avatar)}
                                       alt="Аватар"
@@ -733,11 +808,48 @@ const Home = () => {
                                       <span>@{comment.user_username || 'username'}</span>
                                     </div>
                                   </div>
-                                  <time>{formatPostTime(comment.created_at)}</time>
+                                  <div className="comment-card__actions">
+                                    <time>{formatPostTime(comment.created_at)}</time>
+                                    {user?.is_admin && (
+                                      <div className="post-card__moderation-menu" data-moderation-menu>
+                                        <button
+                                          className="home-icon-button comment-card__more"
+                                          type="button"
+                                          aria-label="Действия модерации комментария"
+                                          aria-haspopup="menu"
+                                          aria-expanded={openModerationMenu === moderationMenuId}
+                                          aria-controls={`moderation-menu-${moderationMenuId}`}
+                                          onClick={(event) => toggleModerationMenu(moderationMenuId, event)}
+                                        >
+                                          <i className="fas fa-ellipsis-h" />
+                                        </button>
+                                        {openModerationMenu === moderationMenuId && (
+                                          <div
+                                            className="post-card__moderation-dropdown"
+                                            id={`moderation-menu-${moderationMenuId}`}
+                                            role="menu"
+                                            onClick={(event) => event.stopPropagation()}
+                                          >
+                                            <button
+                                              className="post-card__moderation-delete"
+                                              type="button"
+                                              role="menuitem"
+                                              onClick={() => void handleModerateComment(post.id, comment.id)}
+                                              disabled={moderatingCommentId === comment.id}
+                                            >
+                                              <i className="far fa-trash-alt" />
+                                              <span>{moderatingCommentId === comment.id ? 'Удаляем...' : 'Удалить комментарий'}</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                                 <p>{comment.content}</p>
                               </div>
-                            ))}
+                              );
+                            })}
 
                             {comments.length > 5 && (
                               <button
@@ -780,7 +892,7 @@ const Home = () => {
             ) : (
               <>
                 <div className="home-profile-modal__header">
-                  <img src={avatarSrc(profileUser.avatar)} alt="Аватар" />
+                  <UserAvatar src={avatarSrc(profileUser.avatar)} alt="Аватар" />
                   <div>
                     <h2>{profileUser.name || 'Пользователь'}</h2>
                     <p>@{profileUser.username || 'username'}</p>
@@ -800,6 +912,16 @@ const Home = () => {
                       {profileUser.is_following ? 'Вы подписаны' : 'Подписаться'}
                     </button>
                     <button className="home-button home-button--ghost" type="button" onClick={() => startConversation(profileUser.id)}>Написать</button>
+                    {user?.is_admin && !profileUser.is_admin && (
+                      <button
+                        className="home-button home-button--danger"
+                        type="button"
+                        onClick={handleUserBan}
+                        disabled={banningUser}
+                      >
+                        {banningUser ? 'Обновляем...' : profileUser.is_banned ? 'Разбанить пользователя' : 'Заблокировать пользователя'}
+                      </button>
+                    )}
                   </div>
                 )}
 

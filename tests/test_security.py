@@ -47,6 +47,19 @@ def test_oversized_post_is_rejected(client, users):
     assert client.post("/api/posts", json={"content": "x" * 5001}, headers=headers(first)).status_code == 400
 
 
+def test_post_creation_has_per_user_cooldown(client, users):
+    first, _ = users
+    client.application.config["TESTING"] = False
+    try:
+        assert client.post("/api/posts", json={"content": "first"}, headers=headers(first)).status_code == 201
+        response = client.post("/api/posts", json={"content": "second"}, headers=headers(first))
+    finally:
+        client.application.config["TESTING"] = True
+
+    assert response.status_code == 429
+    assert response.get_json()["error"]["code"] == "rate_limited"
+
+
 def test_logout_revokes_session(client, users):
     first, _ = users
     assert client.post("/logout", headers=headers(first)).status_code == 200

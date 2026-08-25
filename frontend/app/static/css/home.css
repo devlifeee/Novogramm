@@ -223,7 +223,7 @@ input {
   object-fit: cover;
 }
 
-.home-search__person span {
+.home-search__person > .home-search__person-content {
   display: grid;
   min-width: 0;
 }
@@ -590,6 +590,21 @@ input {
   transform: none;
 }
 
+.home-button--danger {
+  color: #ffffff;
+  background: rgba(202, 65, 65, 0.82);
+  box-shadow: 0 14px 28px rgba(146, 29, 29, 0.24);
+}
+
+.home-button--danger:hover {
+  background: rgba(225, 73, 73, 0.94);
+}
+
+.home-button--danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .home-button--ghost,
 .home-icon-button {
   color: #ffffff;
@@ -630,12 +645,18 @@ input {
   height: 36px;
 }
 
-.home-profile-chip span {
+.home-profile-chip > .home-profile-chip__name {
   overflow: hidden;
   font-size: 13px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.user-avatar {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .home-message {
@@ -910,6 +931,18 @@ input {
   gap: 12px;
 }
 
+.comment-card__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-card__more {
+  width: 32px;
+  height: 32px;
+}
+
 .comment-card__user {
   min-width: 0;
   gap: 10px;
@@ -1038,7 +1071,7 @@ input {
   font-weight: 800;
 }
 
-.home-profile-modal__header span {
+.home-profile-modal__header > div span {
   display: block;
   margin-top: 10px;
   color: var(--auth-text-secondary);
@@ -1368,7 +1401,7 @@ input {
     grid-template-columns: 1fr;
   }
 
-  .create-post__top .home-avatar {
+  .create-post__top .user-avatar {
     display: none;
   }
 
@@ -1376,4 +1409,3 @@ input {
     grid-template-columns: minmax(0, 1fr) 42px;
   }
 }
-

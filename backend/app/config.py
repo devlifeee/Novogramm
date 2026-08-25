@@ -30,6 +30,7 @@ class Config:
 
     MAX_CONTENT_LENGTH = int(os.getenv("MAX_REQUEST_BYTES", str(6 * 1024 * 1024)))
     MAX_POST_LENGTH = int(os.getenv("MAX_POST_LENGTH", "5000"))
+    POST_COOLDOWN_SECONDS = int(os.getenv("POST_COOLDOWN_SECONDS", "30"))
     MAX_COMMENT_LENGTH = int(os.getenv("MAX_COMMENT_LENGTH", "1000"))
     MAX_MESSAGE_LENGTH = int(os.getenv("MAX_MESSAGE_LENGTH", "4000"))
     # UPLOAD_FOLDER is retained as a fallback for existing local deployments.
