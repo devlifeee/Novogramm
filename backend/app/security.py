@@ -49,7 +49,7 @@ def current_user():
     return execute_query(
         """
         SELECT u.id, u.email, u.name, u.username, u.phone, u.phone_verified_at,
-               u.verified, u.is_admin, u.banned_at, u.clown_hat_at, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
+               u.verified, u.is_admin, u.banned_at, u.avatar, u.banner, u.bio, u.created_at, u.updated_at
         FROM sessions s JOIN email_auth u ON u.id=s.user_id
         WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at>CURRENT_TIMESTAMP
         """,

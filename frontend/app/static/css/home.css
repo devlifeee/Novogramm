@@ -659,17 +659,6 @@ input {
   flex: 0 0 auto;
 }
 
-.user-avatar__clown-hat {
-  position: absolute;
-  z-index: 1;
-  top: -1.05em;
-  left: 50%;
-  font-size: 2em;
-  line-height: 1;
-  pointer-events: none;
-  transform: translateX(-50%);
-}
-
 .home-message {
   padding: 14px 16px;
   border-radius: 18px;

@@ -131,7 +131,6 @@ def upload_avatar():
 POST_SELECT = """
 SELECT p.id,p.user_id,p.content,p.image_path,p.created_at,p.updated_at,
  u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar,
- u.clown_hat_at IS NOT NULL AS user_has_clown_hat,
  (SELECT COUNT(*) FROM post_likes l WHERE l.post_id=p.id) AS likes_count,
  (SELECT COUNT(*) FROM comments c WHERE c.post_id=p.id AND c.deleted_at IS NULL) AS comments_count,
  EXISTS(SELECT 1 FROM post_likes l WHERE l.post_id=p.id AND l.user_id=%s) AS is_liked
@@ -141,7 +140,7 @@ WHERE p.deleted_at IS NULL
 
 
 def serialize_post(row):
-    return {"id": row["id"], "user_id": row["user_id"], "content": row["content"], "image_path": row.get("image_path"), "created_at": serialize_time(row), "updated_at": serialize_time(row, "updated_at"), "user_name": row.get("user_name"), "user_username": row.get("user_username"), "user_avatar": row.get("user_avatar") or "/static/images/default-avatar.png", "user_has_clown_hat": bool(row.get("user_has_clown_hat")), "likes_count": int(row.get("likes_count", 0)), "comments_count": int(row.get("comments_count", 0)), "is_liked": bool(row.get("is_liked"))}
+    return {"id": row["id"], "user_id": row["user_id"], "content": row["content"], "image_path": row.get("image_path"), "created_at": serialize_time(row), "updated_at": serialize_time(row, "updated_at"), "user_name": row.get("user_name"), "user_username": row.get("user_username"), "user_avatar": row.get("user_avatar") or "/static/images/default-avatar.png", "likes_count": int(row.get("likes_count", 0)), "comments_count": int(row.get("comments_count", 0)), "is_liked": bool(row.get("is_liked"))}
 
 
 @main.post("/create_post")
@@ -271,7 +270,7 @@ def create_comment(post_id):
     if not execute_query("SELECT id FROM posts WHERE id=%s AND deleted_at IS NULL", (post_id,), fetch=True):
         return error("Пост не найден", 404, "not_found")
     row = execute_query("INSERT INTO comments(user_id,post_id,content) VALUES(%s,%s,%s) RETURNING id,created_at", (g.current_user["id"], post_id, content), fetch=True)
-    response = {"success": True, "id": row["id"], "post_id": post_id, "user_id": g.current_user["id"], "user_name": g.current_user["name"], "user_username": g.current_user["username"], "user_avatar": g.current_user.get("avatar") or "/static/images/default-avatar.png", "user_has_clown_hat": bool(g.current_user.get("clown_hat_at")), "content": content, "created_at": serialize_time(row)}
+    response = {"success": True, "id": row["id"], "post_id": post_id, "user_id": g.current_user["id"], "user_name": g.current_user["name"], "user_username": g.current_user["username"], "user_avatar": g.current_user.get("avatar") or "/static/images/default-avatar.png", "content": content, "created_at": serialize_time(row)}
     return jsonify(response), 201
 
 
@@ -285,8 +284,8 @@ def comments(post_id):
         limit, offset = pagination(50, 100)
     except ValueError as exc:
         return error(str(exc))
-    rows = execute_query("SELECT c.id,c.user_id,c.content,c.created_at,c.updated_at,u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar,u.clown_hat_at IS NOT NULL AS user_has_clown_hat FROM comments c JOIN email_auth u ON u.id=c.user_id WHERE c.post_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id LIMIT %s OFFSET %s", (post_id, limit, offset), fetchall=True)
-    return jsonify([{**row, "created_at": serialize_time(row), "updated_at": serialize_time(row, "updated_at"), "user_avatar": row.get("user_avatar") or "/static/images/default-avatar.png", "user_has_clown_hat": bool(row.get("user_has_clown_hat"))} for row in rows])
+    rows = execute_query("SELECT c.id,c.user_id,c.content,c.created_at,c.updated_at,u.name AS user_name,u.username AS user_username,u.avatar AS user_avatar FROM comments c JOIN email_auth u ON u.id=c.user_id WHERE c.post_id=%s AND c.deleted_at IS NULL ORDER BY c.created_at,c.id LIMIT %s OFFSET %s", (post_id, limit, offset), fetchall=True)
+    return jsonify([{**row, "created_at": serialize_time(row), "updated_at": serialize_time(row, "updated_at"), "user_avatar": row.get("user_avatar") or "/static/images/default-avatar.png"} for row in rows])
 
 
 @main.put("/api/comments/<int:comment_id>")
@@ -366,14 +365,14 @@ def search_users():
     if len(query) < 2:
         return jsonify({"success": True, "users": []})
     pattern = f"%{query}%"
-    rows = execute_query("SELECT u.id,u.name,u.username,u.avatar,u.bio,u.clown_hat_at IS NOT NULL AS has_clown_hat,(SELECT COUNT(*) FROM follows f WHERE f.following_id=u.id) AS followers_count,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=%s AND f.following_id=u.id) AS is_following FROM email_auth u WHERE u.id<>%s AND (LOWER(u.name) LIKE %s OR LOWER(u.username) LIKE %s) ORDER BY followers_count DESC,u.id LIMIT 20", (g.current_user["id"], g.current_user["id"], pattern, pattern), fetchall=True)
-    return jsonify({"success": True, "users": [{**row, "is_following": bool(row["is_following"]), "has_clown_hat": bool(row["has_clown_hat"]), "avatar": row.get("avatar") or "/static/images/default-avatar.png"} for row in rows]})
+    rows = execute_query("SELECT u.id,u.name,u.username,u.avatar,u.bio,(SELECT COUNT(*) FROM follows f WHERE f.following_id=u.id) AS followers_count,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=%s AND f.following_id=u.id) AS is_following FROM email_auth u WHERE u.id<>%s AND (LOWER(u.name) LIKE %s OR LOWER(u.username) LIKE %s) ORDER BY followers_count DESC,u.id LIMIT 20", (g.current_user["id"], g.current_user["id"], pattern, pattern), fetchall=True)
+    return jsonify({"success": True, "users": [{**row, "is_following": bool(row["is_following"]), "avatar": row.get("avatar") or "/static/images/default-avatar.png"} for row in rows]})
 
 
 @main.get("/api/get_user/<int:user_id>")
 @auth_required
 def get_user(user_id):
-    row = execute_query("SELECT u.id,u.name,u.username,u.avatar,u.bio,u.created_at,u.is_admin,u.banned_at,u.clown_hat_at,(SELECT COUNT(*) FROM follows WHERE following_id=u.id) AS followers_count,(SELECT COUNT(*) FROM follows WHERE follower_id=u.id) AS following_count,EXISTS(SELECT 1 FROM follows WHERE follower_id=%s AND following_id=u.id) AS is_following FROM email_auth u WHERE u.id=%s", (g.current_user["id"], user_id), fetch=True)
+    row = execute_query("SELECT u.id,u.name,u.username,u.avatar,u.bio,u.created_at,u.is_admin,u.banned_at,(SELECT COUNT(*) FROM follows WHERE following_id=u.id) AS followers_count,(SELECT COUNT(*) FROM follows WHERE follower_id=u.id) AS following_count,EXISTS(SELECT 1 FROM follows WHERE follower_id=%s AND following_id=u.id) AS is_following FROM email_auth u WHERE u.id=%s", (g.current_user["id"], user_id), fetch=True)
     if not row:
         return error("Пользователь не найден", 404, "not_found")
     row["is_following"] = bool(row["is_following"])
@@ -382,9 +381,7 @@ def get_user(user_id):
         row["is_admin"] = bool(row["is_admin"])
     else:
         row.pop("is_admin", None)
-    row["has_clown_hat"] = bool(row["clown_hat_at"])
     row.pop("banned_at", None)
-    row.pop("clown_hat_at", None)
     row["created_at"] = serialize_time(row)
     return jsonify({"success": True, "user": row})
 
@@ -443,56 +440,6 @@ def unban_user(user_id):
             (g.current_user["id"], user_id, "unban"),
         )
     return jsonify({"success": True, "user_id": user_id, "is_banned": False})
-
-
-@main.post("/api/users/<int:user_id>/clown-hat")
-@admin_required
-def add_clown_hat(user_id):
-    if user_id == g.current_user["id"]:
-        return error("Нельзя назначить метку собственному аккаунту")
-    with transaction() as cursor:
-        cursor.execute(_query("SELECT id,is_admin,clown_hat_at FROM email_auth WHERE id=%s"), (user_id,))
-        target = cursor.fetchone()
-        if not target:
-            return error("Пользователь не найден", 404, "not_found")
-        target = dict(target)
-        if target["is_admin"]:
-            return error("Нельзя назначить метку аккаунту администратора", 403, "protected_account")
-        if target["clown_hat_at"]:
-            return error("Метка уже назначена", 409, "already_assigned")
-        cursor.execute(
-            _query("UPDATE email_auth SET clown_hat_at=CURRENT_TIMESTAMP,clown_hat_by=%s,updated_at=CURRENT_TIMESTAMP WHERE id=%s"),
-            (g.current_user["id"], user_id),
-        )
-        cursor.execute(
-            _query("INSERT INTO user_clown_hat_audit(moderator_user_id,user_id,action) VALUES(%s,%s,%s)"),
-            (g.current_user["id"], user_id, "assign"),
-        )
-    return jsonify({"success": True, "user_id": user_id, "has_clown_hat": True})
-
-
-@main.delete("/api/users/<int:user_id>/clown-hat")
-@admin_required
-def remove_clown_hat(user_id):
-    with transaction() as cursor:
-        cursor.execute(_query("SELECT id,is_admin,clown_hat_at FROM email_auth WHERE id=%s"), (user_id,))
-        target = cursor.fetchone()
-        if not target:
-            return error("Пользователь не найден", 404, "not_found")
-        target = dict(target)
-        if target["is_admin"]:
-            return error("Нельзя изменить метку аккаунта администратора", 403, "protected_account")
-        if not target["clown_hat_at"]:
-            return error("Метка не назначена", 409, "not_assigned")
-        cursor.execute(
-            _query("UPDATE email_auth SET clown_hat_at=NULL,clown_hat_by=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=%s"),
-            (user_id,),
-        )
-        cursor.execute(
-            _query("INSERT INTO user_clown_hat_audit(moderator_user_id,user_id,action) VALUES(%s,%s,%s)"),
-            (g.current_user["id"], user_id, "remove"),
-        )
-    return jsonify({"success": True, "user_id": user_id, "has_clown_hat": False})
 
 
 @main.get("/api/get_user_posts/<int:user_id>")
